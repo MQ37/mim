@@ -1,0 +1,5 @@
+file1.go\x00package main
+file2.go\x00import "fmt"
+file1.go\x0013:func main() {
+file1.go\x0014:    fmt.Println("hello")
+sub/dir/file3.go\x005:    return nil

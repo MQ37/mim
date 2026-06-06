@@ -156,6 +156,7 @@ func truncateVisible(s string, maxWidth int) string {
 	var result []byte
 	vis := 0
 	i := 0
+	hadAnsi := false
 	for i < len(s) && vis < maxWidth {
 		c := s[i]
 		if c == '\033' && i+1 < len(s) && s[i+1] == '[' {
@@ -165,6 +166,7 @@ func truncateVisible(s string, maxWidth int) string {
 			}
 			if j < len(s) {
 				result = append(result, s[i:j+1]...)
+				hadAnsi = true
 				i = j + 1
 				continue
 			}
@@ -172,6 +174,10 @@ func truncateVisible(s string, maxWidth int) string {
 		result = append(result, c)
 		vis++
 		i++
+	}
+	// If we truncated and had ANSI codes, close them to prevent color bleed.
+	if vis >= maxWidth && i < len(s) && hadAnsi {
+		result = append(result, ansiReset...)
 	}
 	return string(result)
 }
