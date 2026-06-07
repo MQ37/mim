@@ -20,6 +20,12 @@ func (a *App) dispatch(seq []byte) {
 		return
 	}
 
+	// Git mode — route to git handler.
+	if a.git != nil {
+		a.handleGitKey(seq)
+		return
+	}
+
 	// When tree is hidden, ViewerFocus is the only focus.
 	if !a.treeVisible && a.focus == TreeFocus {
 		a.focus = ViewerFocus
@@ -73,6 +79,13 @@ func (a *App) handleGlobalKey(seq []byte) bool {
 		} else {
 			// No file open — keep tree visible, focus stays on tree.
 			a.treeVisible = true
+		}
+		return true
+	case 0x07: // Ctrl-G — toggle git diff view
+		if a.git != nil {
+			a.exitGitMode()
+		} else {
+			a.enterGitMode()
 		}
 		return true
 	case 0x06: // Ctrl-F — start find

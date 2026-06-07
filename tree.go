@@ -421,8 +421,8 @@ func (a *App) handleTreeKey(seq []byte) {
 	case bytes.Equal(seq, []byte{0x1b}):
 		a.focus = ViewerFocus
 
-	// Ctrl-G (0x07) — toggle showAll and rebuild tree
-	case bytes.Equal(seq, []byte{0x07}):
+	// Ctrl-A (0x01) — toggle showAll and rebuild tree
+	case bytes.Equal(seq, []byte{0x01}):
 		rootPath := a.tree.rootPath
 		treeShowAll = !a.tree.showAll
 		newT, err := newTree(rootPath)

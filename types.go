@@ -63,6 +63,34 @@ type Hit struct {
 	text string // matching line content
 }
 
+// Commit represents one entry in the git log.
+type Commit struct {
+	hash      string // full 40-char SHA
+	subject   string // first line of commit message
+}
+
+// GitState holds all state for the git diff view mode.
+// When non-nil on App, the UI switches to git mode.
+type GitState struct {
+	// Commit list (left pane, replaces Tree)
+	commits   []Commit
+	commitCur int      // cursor index into commits
+	commitScr int      // first visible commit row
+	selAnchor int      // anchor where v was pressed; -1 = no selection
+
+	// Computed range (always selStart <= selEnd after normalization).
+	// When selAnchor == -1, these are both -1.
+	selStart int
+	selEnd   int
+
+	// Diff output (right pane, replaces Buf)
+	diffLines  []string // raw lines from git diff --color=always
+	diffCursor int      // cursor line in diff (0-indexed)
+	diffScr    int      // first visible diff line
+
+	loadingDiff bool
+}
+
 // App is the global application state.
 type App struct {
 	// File tree (left pane)
@@ -92,6 +120,10 @@ type App struct {
 
 	// Status line
 	statusMsg string // temporary message shown instead of default status
+
+	// Git diff view state. When non-nil, the UI switches to git mode:
+	// left pane = commit list, right pane = diff viewer.
+	git *GitState
 
 	// Lifecycle
 	quit bool

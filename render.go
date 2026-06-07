@@ -206,6 +206,35 @@ func (a *App) render() {
 
 	buf.WriteString(ansiHideCursor)
 
+	// Git mode overrides the standard layout.
+	if a.git != nil {
+		a.renderGitView(&buf)
+		a.renderStatus(&buf)
+		// Cursor in git mode.
+		if a.git.diffLines != nil {
+			visRow := a.git.diffCursor - a.git.diffScr
+			if visRow < 0 {
+				visRow = 0
+			}
+			if visRow >= a.termH-1 {
+				visRow = a.termH - 2
+			}
+			buf.WriteString(cursorMove(visRow+1, a.treeW+2))
+		} else {
+			visRow := a.git.commitCur - a.git.commitScr
+			if visRow < 0 {
+				visRow = 0
+			}
+			if visRow >= a.termH-1 {
+				visRow = a.termH - 2
+			}
+			buf.WriteString(cursorMove(visRow+1, 1))
+		}
+		buf.WriteString(ansiShowCursor)
+		os.Stdout.Write(buf.Bytes())
+		return
+	}
+
 	// Row-major loop: tree pane, separator, viewer pane for each visible row.
 	viewerCol := 1 // 1-indexed column where viewer starts
 	if a.treeVisible {
@@ -511,6 +540,21 @@ func (a *App) renderStatus(out *bytes.Buffer) {
 		status = a.statusMsg
 		a.statusMsg = "" // clear after displaying
 	} else {
+		if a.git != nil {
+			g := a.git
+			if g.diffLines != nil {
+				status = "-- DIFF: " + g.commits[g.selStart].hash[:8] + ".." + g.commits[g.selEnd].hash[:8] + " --"
+			} else if g.selStart != -1 {
+				n := g.selEnd - g.selStart + 1
+				status = "-- GIT: " + strconv.Itoa(n) + " commit"
+				if n > 1 {
+					status += "s"
+				}
+				status += " selected --"
+			} else {
+				status = "-- GIT: " + strconv.Itoa(len(g.commits)) + " commits --"
+			}
+		} else {
 		switch a.focus {
 		case TreeFocus:
 			status = "-- TREE --"
@@ -529,7 +573,8 @@ func (a *App) renderStatus(out *bytes.Buffer) {
 		case FindResultsFocus:
 			status = "-- FIND: " + strconv.Itoa(len(a.findHits)) + " matches --"
 		}
-	}
+		} // end else (git mode)
+	} // end outer else (statusMsg)
 
 	// Build left-aligned file info.
 	var leftText string
