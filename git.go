@@ -49,12 +49,6 @@ func (a *App) enterGitMode() {
 	a.focus = TreeFocus // commit list occupies tree pane
 }
 
-// exitGitMode clears git state and returns to normal view.
-func (a *App) exitGitMode() {
-	a.git = nil
-	a.focus = TreeFocus
-}
-
 // updateSelection recomputes selStart/selEnd from selAnchor and commitCur.
 // The anchor stays fixed; the cursor extends. Normalizes so selStart <= selEnd.
 func (g *GitState) updateSelection() {
@@ -137,21 +131,14 @@ func (a *App) handleGitKey(seq []byte) {
 		return
 	}
 
-	// ESC behavior:
-	//   In diff view → back to commit list (clear selection)
-	//   In commit list with selection → clear selection
-	//   In commit list without selection → exit git mode
+	// ESC: in diff/selection → clear selection. Otherwise → exit git mode.
 	if bytes.Equal(seq, []byte{0x1b}) {
-		if g.selAnchor != -1 && g.diffLines != nil {
-			// Viewing diff: back to commit list, clear selection.
-			g.clearSelection()
-			return
-		}
 		if g.selAnchor != -1 {
-			g.clearSelection()
+			g.clearSelection() // also clears diffLines
 			return
 		}
-		a.exitGitMode()
+		a.git = nil
+		a.focus = TreeFocus
 		return
 	}
 
@@ -166,22 +153,8 @@ func (a *App) handleGitKey(seq []byte) {
 }
 
 
-// ensureCommitVisible adjusts commitScr so commitCur is on screen.
 func (a *App) ensureCommitVisible() {
-	g := a.git
-	visibleH := a.termH - 1
-	if visibleH < 1 {
-		visibleH = 1
-	}
-	if g.commitCur < g.commitScr {
-		g.commitScr = g.commitCur
-	}
-	if g.commitCur >= g.commitScr+visibleH {
-		g.commitScr = g.commitCur - visibleH + 1
-	}
-	if g.commitScr < 0 {
-		g.commitScr = 0
-	}
+	clampScroll(a.git.commitCur, &a.git.commitScr, a.termH-1, len(a.git.commits))
 }
 
 // handleCommitListKey handles keys when browsing the commit list.
@@ -268,22 +241,8 @@ func (a *App) handleCommitListKey(seq []byte) {
 }
 
 
-// ensureDiffVisible adjusts diffScr so diffCursor is on screen.
 func (a *App) ensureDiffVisible() {
-	g := a.git
-	visibleH := a.termH - 1
-	if visibleH < 1 {
-		visibleH = 1
-	}
-	if g.diffCursor < g.diffScr {
-		g.diffScr = g.diffCursor
-	}
-	if g.diffCursor >= g.diffScr+visibleH {
-		g.diffScr = g.diffCursor - visibleH + 1
-	}
-	if g.diffScr < 0 {
-		g.diffScr = 0
-	}
+	clampScroll(a.git.diffCursor, &a.git.diffScr, a.termH-1, len(a.git.diffLines))
 }
 
 // handleDiffViewKey handles keys when viewing diff output.

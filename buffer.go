@@ -98,24 +98,7 @@ func (b *Buf) clampCursor() {
 // ensureVisible adjusts b.scr so that b.cy is visible within a viewport
 // of vpHeight rows. Called after any cursor movement.
 func (b *Buf) ensureVisible(vpHeight int) {
-	if b.cy < b.scr {
-		b.scr = b.cy
-	}
-	if b.cy >= b.scr+vpHeight {
-		b.scr = b.cy - vpHeight + 1
-	}
-
-	// Clamp scr to valid range.
-	maxScr := b.LineCount() - 1
-	if maxScr < 0 {
-		maxScr = 0
-	}
-	if b.scr < 0 {
-		b.scr = 0
-	}
-	if b.scr > maxScr {
-		b.scr = maxScr
-	}
+	clampScroll(b.cy, &b.scr, vpHeight, b.LineCount())
 }
 
 // cursorCol returns the visual column of the cursor, expanding tabs

@@ -233,26 +233,7 @@ func (a *App) handleFindResultsKey(seq []byte) {
 
 // scrollFindToCursor ensures findCur is visible by adjusting findScr.
 func (a *App) scrollFindToCursor() {
-	visible := a.termH - 1 // rows 0..termH-2
-
-	if a.findCur < a.findScr {
-		a.findScr = a.findCur
-	}
-	if a.findCur >= a.findScr+visible {
-		a.findScr = a.findCur - visible + 1
-	}
-
-	// Clamp findScr.
-	if a.findScr < 0 {
-		a.findScr = 0
-	}
-	maxScr := len(a.findHits) - visible
-	if maxScr < 0 {
-		maxScr = 0
-	}
-	if a.findScr > maxScr {
-		a.findScr = maxScr
-	}
+	clampScroll(a.findCur, &a.findScr, a.termH-1, len(a.findHits))
 }
 
 // renderFindInput draws the centered find popup overlay.

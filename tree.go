@@ -242,14 +242,6 @@ func (t *Tree) walkFlat(n *Node) {
 // Queries
 // ---------------------------------------------------------------------------
 
-// selectedPath returns the full path of the currently selected node,
-// or t.rootPath when flat is empty.
-func (t *Tree) selectedPath() string {
-	if len(t.flat) == 0 || t.cursor < 0 || t.cursor >= len(t.flat) {
-		return t.rootPath
-	}
-	return t.flat[t.cursor].path
-}
 
 // ---------------------------------------------------------------------------
 // Expand / collapse
@@ -273,18 +265,6 @@ func (t *Tree) expandCurrent() {
 }
 
 // collapseCurrent closes the selected directory.  No-op for files.
-func (t *Tree) collapseCurrent() {
-	if len(t.flat) == 0 || t.cursor < 0 || t.cursor >= len(t.flat) {
-		return
-	}
-	n := t.flat[t.cursor]
-	if !n.isDir {
-		return
-	}
-	n.open = false
-	t.dirty = true
-}
-
 // readDir reads directory entries from dirPath, applies .gitignore filtering
 // when showAll is false, and returns a sorted slice of Nodes.
 func readDir(dirPath string, showAll bool) []*Node {
@@ -447,27 +427,7 @@ func (a *App) handleTreeKey(seq []byte) {
 // ensureTreeVisible adjusts t.scr so that t.cursor is visible in the tree
 // pane (visible height = termH - 2).
 func (a *App) ensureTreeVisible() {
-	t := &a.tree
-	visibleH := a.termH - 2
-	if visibleH < 1 {
-		visibleH = 1
-	}
-	if t.cursor < t.scr {
-		t.scr = t.cursor
-	}
-	if t.cursor >= t.scr+visibleH {
-		t.scr = t.cursor - visibleH + 1
-	}
-	if t.scr < 0 {
-		t.scr = 0
-	}
-	maxScr := len(t.flat) - visibleH
-	if maxScr < 0 {
-		maxScr = 0
-	}
-	if t.scr > maxScr {
-		t.scr = maxScr
-	}
+	clampScroll(a.tree.cursor, &a.tree.scr, a.termH-1, len(a.tree.flat))
 }
 
 // ---------------------------------------------------------------------------

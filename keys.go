@@ -82,7 +82,8 @@ func (a *App) handleGlobalKey(seq []byte) bool {
 		return true
 	case 0x07: // Ctrl-G — toggle git diff view
 		if a.git != nil {
-			a.exitGitMode()
+			a.git = nil
+			a.focus = TreeFocus
 		} else {
 			a.enterGitMode()
 		}
