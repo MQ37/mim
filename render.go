@@ -11,31 +11,22 @@ import (
 	"strings"
 )
 
-// --- ANSI constants ---
-
+// ANSI escape sequences.
 const (
-	ansiClear      = "\033[2J"
-	ansiHome       = "\033[H"
-	ansiHideCursor = "\033[?25l"
-	ansiShowCursor = "\033[?25h"
 	ansiReset      = "\033[0m"
-	ansiBold       = "\033[1m"
 	ansiDim        = "\033[2m"
 	ansiReverse    = "\033[7m"
+	ansiHideCursor = "\033[?25l"
+	ansiShowCursor = "\033[?25h"
 )
 
-// 16 standard ANSI colors
+// Color palette (ANSI 256-color indices).
 const (
-	colorBlack   = 0
-	colorRed     = 1
-	colorGreen   = 2
 	colorYellow  = 3
 	colorBlue    = 4
-	colorMagenta = 5
-	colorCyan    = 6
 	colorWhite   = 7
-	colorDim     = 8  // bright black (grey)
-	colorStatus  = 12 // bright blue for status bar
+	colorGrey    = 8
+	colorStatus  = 12
 )
 
 // --- ANSI escape helpers ---

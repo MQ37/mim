@@ -1,6 +1,4 @@
-// types.go — shared types and constants for mim.
-// All subagent files reference these types. Do not modify without
-// coordinating across buffer.go, tree.go, search.go, render.go, keys.go.
+// Types and constants shared across all files.
 
 package main
 
@@ -127,13 +125,6 @@ type App struct {
 
 	// Lifecycle
 	quit bool
-}
-
-// binding maps a key sequence to an action for a specific focus.
-type binding struct {
-	focus Focus
-	seq   []byte // raw byte sequence from stdin
-	fn    func(*App)
 }
 
 // termState holds saved terminal attributes for restore on exit.

@@ -1,4 +1,4 @@
-// git.go — git diff view mode: commit list + range diff.
+// Git diff view — commit list + range diff.
 // Ctrl+G enters/exits. v anchors selection, movement extends, Enter computes diff.
 
 package main
@@ -8,6 +8,9 @@ import (
 	"os/exec"
 	"strings"
 )
+
+// minCommitLineLen = 40-char SHA + space + ≥1 char subject.
+const minCommitLineLen = 42
 
 // enterGitMode loads the commit list and switches to git view.
 func (a *App) enterGitMode() {
@@ -19,10 +22,10 @@ func (a *App) enterGitMode() {
 		return
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
 	commits := make([]Commit, 0, len(lines))
 	for _, line := range lines {
-		if len(line) < 42 {
+		if len(line) < minCommitLineLen {
 			continue
 		}
 		commits = append(commits, Commit{
@@ -162,7 +165,6 @@ func (a *App) handleGitKey(seq []byte) {
 	a.handleDiffViewKey(seq)
 }
 
-// --- Commit list key handling ---
 
 // ensureCommitVisible adjusts commitScr so commitCur is on screen.
 func (a *App) ensureCommitVisible() {
@@ -265,7 +267,6 @@ func (a *App) handleCommitListKey(seq []byte) {
 	}
 }
 
-// --- Diff view key handling ---
 
 // ensureDiffVisible adjusts diffScr so diffCursor is on screen.
 func (a *App) ensureDiffVisible() {
@@ -334,7 +335,6 @@ func (a *App) handleDiffViewKey(seq []byte) {
 	}
 }
 
-// --- Rendering ---
 
 // renderGitView draws the full git mode layout: commit list + diff.
 func (a *App) renderGitView(out *bytes.Buffer) {

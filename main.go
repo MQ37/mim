@@ -1,5 +1,4 @@
-// main.go — terminal init/restore, event loop, signal handling.
-// This is the entry point and lifecycle manager. Subagents do NOT modify this file.
+// Terminal init, raw mode, event loop, signal handling.
 
 package main
 
@@ -71,25 +70,12 @@ func run() error {
 
 	// Main event loop.
 	for !app.quit {
-		// Wait for either a keypress or a signal.
 		key := readKey()
 		if key == nil {
-			// Check for pending SIGWINCH.
 			select {
 			case <-sigwinch:
-			if tw2, th2, err := getTermSize(int(os.Stdin.Fd())); err == nil && tw2 > 0 && th2 > 0 {
-				tw, th = tw2, th2
-				app.termW = tw
-				app.termH = th
-				app.treeW = tw * 30 / 100
-				if app.treeW < 15 {
-					app.treeW = 15
-				}
-				if app.treeW > 40 {
-					app.treeW = 40
-				}
-			}
-			app.render()
+				app.handleResize()
+				app.render()
 			default:
 			}
 			continue
@@ -98,27 +84,33 @@ func run() error {
 		app.dispatch(key)
 		app.render()
 
-		// Drain any pending SIGWINCH after render (non-blocking).
+		// Drain any pending SIGWINCH after render.
 		select {
 		case <-sigwinch:
-			if tw2, th2, err := getTermSize(int(os.Stdin.Fd())); err == nil && tw2 > 0 && th2 > 0 {
-				tw, th = tw2, th2
-				app.termW = tw
-				app.termH = th
-				app.treeW = tw * 30 / 100
-				if app.treeW < 15 {
-					app.treeW = 15
-				}
-				if app.treeW > 40 {
-					app.treeW = 40
-				}
-			}
+			app.handleResize()
 			app.render()
 		default:
 		}
 	}
 
 	return nil
+}
+
+// handleResize updates terminal dimensions from the OS.
+func (a *App) handleResize() {
+	tw, th, err := getTermSize(int(os.Stdin.Fd()))
+	if err != nil || tw <= 0 || th <= 0 {
+		return
+	}
+	a.termW = tw
+	a.termH = th
+	a.treeW = tw * 30 / 100
+	if a.treeW < 15 {
+		a.treeW = 15
+	}
+	if a.treeW > 40 {
+		a.treeW = 40
+	}
 }
 
 // --- Terminal raw mode (vendored from golang.org/x/term for Linux) ---

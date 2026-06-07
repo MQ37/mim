@@ -1,6 +1,4 @@
-// highlight.go — simple syntax highlighting for Go, Python, and TypeScript.
-// Character-by-character scanning, no regex, no external dependencies.
-// Returns (start, end, color) segments for each line.
+// Character-by-character scanner, no regex, no external deps.
 
 package main
 

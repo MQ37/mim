@@ -1,5 +1,4 @@
-// keys.go — central input router and all viewer-mode key handlers.
-// Implements dispatch, global keys, and vim-like viewer navigation.
+// Key dispatch and viewer-mode vim keybindings.
 
 package main
 
