@@ -67,7 +67,7 @@ func TestGitUpdateSelection(t *testing.T) {
 	g.commitCur = 2
 	g.updateSelection()
 	if g.selStart != 1 || g.selEnd != 2 {
-		t.Errorf("move down: want [1,2], got [%d,%d]", g.selStart, g.selEnd)
+		t.Errorf("move down: want [2,3], got [%d,%d]", g.selStart, g.selEnd)
 	}
 }
 
@@ -102,14 +102,15 @@ func TestGitEnterExit(t *testing.T) {
 	if app.Git == nil {
 		t.Fatal("enterGitMode: git state is nil")
 	}
-	if len(app.Git.commits) != 2 {
-		t.Fatalf("expected 2 commits, got %d", len(app.Git.commits))
+	if len(app.Git.commits) != 4 {
+		t.Fatalf("expected 4 commits, got %d", len(app.Git.commits))
 	}
-	if app.Git.commits[0].subject != "second commit" {
-		t.Errorf("HEAD should be second commit, got %q", app.Git.commits[0].subject)
+	// Real commits start at index 2 (after Unstaged, Staged).
+	if app.Git.commits[2].subject != "second commit" {
+		t.Errorf("index 2 should be second commit, got %q", app.Git.commits[2].subject)
 	}
-	if app.Git.commits[1].subject != "first commit" {
-		t.Errorf("second entry should be first commit, got %q", app.Git.commits[1].subject)
+	if app.Git.commits[3].subject != "first commit" {
+		t.Errorf("index 3 should be first commit, got %q", app.Git.commits[3].subject)
 	}
 	if app.Git.selAnchor != -1 || app.Git.selStart != -1 {
 		t.Error("no selection should be active on enter")
@@ -130,9 +131,10 @@ func TestGitComputeDiff(t *testing.T) {
 	app.TreeW = 25
 	app.enterGitMode()
 
-	// Select first commit (HEAD) and diff it.
+	// Select HEAD (first real commit at index 2) and diff it.
 	g := app.Git
-	g.selAnchor = 0
+	g.commitCur = 2
+	g.selAnchor = 2
 	g.updateSelection()
 	app.computeDiff()
 	if g.diffLines == nil {
@@ -153,9 +155,9 @@ func TestGitComputeDiff(t *testing.T) {
 		t.Error("computeDiff: git show output should contain commit subject")
 	}
 
-	// Select both commits (range) and diff.
-	g.selAnchor = 1 // first commit (older)
-	g.commitCur = 0  // second commit (newer)
+	// Select both real commits (range) and diff.
+	g.selAnchor = 3 // first commit (older, at index 3)
+	g.commitCur = 2 // HEAD (newer, at index 2)
 	g.updateSelection()
 	app.computeDiff()
 	if g.diffLines == nil || len(g.diffLines) == 0 {
@@ -172,30 +174,30 @@ func TestGitKeyDispatch(t *testing.T) {
 	app.enterGitMode()
 	g := app.Git
 
-	// j — move down.
-	g.commitCur = 0
+	// j — move down from first real commit (index 2).
+	g.commitCur = 2
 	app.handleGitKey([]byte{'j'})
-	if g.commitCur != 1 {
-		t.Errorf("j: commitCur should be 1, got %d", g.commitCur)
+	if g.commitCur != 3 {
+		t.Errorf("j: commitCur should be 3, got %d", g.commitCur)
 	}
 
 	// k — move up.
 	app.handleGitKey([]byte{'k'})
-	if g.commitCur != 0 {
-		t.Errorf("k: commitCur should be 0, got %d", g.commitCur)
+	if g.commitCur != 2 {
+		t.Errorf("k: commitCur should be 2, got %d", g.commitCur)
 	}
 
 	// v — start selection.
 	app.handleGitKey([]byte{'v'})
-	if g.selAnchor != 0 || g.selStart != 0 || g.selEnd != 0 {
-		t.Errorf("v: selection should be [0,0], got anchor=%d [%d,%d]",
+	if g.selAnchor != 2 || g.selStart != 2 || g.selEnd != 2 {
+		t.Errorf("v: selection should be [2,2], got anchor=%d [%d,%d]",
 			g.selAnchor, g.selStart, g.selEnd)
 	}
 
 	// j extends selection down.
 	app.handleGitKey([]byte{'j'})
-	if g.selStart != 0 || g.selEnd != 1 {
-		t.Errorf("v then j: selection should be [0,1], got [%d,%d]", g.selStart, g.selEnd)
+	if g.selStart != 2 || g.selEnd != 3 {
+		t.Errorf("v then j: selection should be [2,3], got [%d,%d]", g.selStart, g.selEnd)
 	}
 
 	// v again — toggle selection off.
@@ -205,11 +207,11 @@ func TestGitKeyDispatch(t *testing.T) {
 	}
 
 	// Enter with no selection — auto-selects current + shows diff.
-	g.commitCur = 0
+	g.commitCur = 2
 	g.diffLines = nil
 	app.handleGitKey([]byte{'\r'})
-	if g.selAnchor != 0 {
-		t.Error("Enter without selection: should auto-select current commit")
+	if g.selAnchor != 2 {
+		t.Errorf("Enter without selection: should auto-select current, got anchor=%d", g.selAnchor)
 	}
 	if g.diffLines == nil {
 		t.Error("Enter: should compute diff")
@@ -239,21 +241,21 @@ func TestGitSelectionRangeOnMovement(t *testing.T) {
 	app.TreeW = 25
 	app.enterGitMode()
 
-	// Anchor at commit 1 (older), move to 0 (newer) — selection spans [0,1].
-	app.Git.selAnchor = 1
-	app.Git.commitCur = 0
+	// Anchor at commit 3 (older), move to 2 (newer) — range [2,3].
+	app.Git.selAnchor = 3
+	app.Git.commitCur = 2
 	app.Git.updateSelection()
-	if app.Git.selStart != 0 || app.Git.selEnd != 1 {
-		t.Errorf("anchor=1,cur=0: want [0,1] (normalized), got [%d,%d]",
+	if app.Git.selStart != 2 || app.Git.selEnd != 3 {
+		t.Errorf("anchor=3,cur=2: want [2,3] (normalized), got [%d,%d]",
 			app.Git.selStart, app.Git.selEnd)
 	}
 
-	// Anchor at 0, move to 1 — same result after normalization.
-	app.Git.selAnchor = 0
-	app.Git.commitCur = 1
+	// Anchor at 2, move to 3 — same result after normalization.
+	app.Git.selAnchor = 2
+	app.Git.commitCur = 3
 	app.Git.updateSelection()
-	if app.Git.selStart != 0 || app.Git.selEnd != 1 {
-		t.Errorf("anchor=0,cur=1: want [0,1], got [%d,%d]",
+	if app.Git.selStart != 2 || app.Git.selEnd != 3 {
+		t.Errorf("anchor=2,cur=3: want [2,3], got [%d,%d]",
 			app.Git.selStart, app.Git.selEnd)
 	}
 }

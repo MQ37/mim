@@ -181,25 +181,24 @@ func (b *Buf) visualText() string {
 	return strings.Join(parts, "\n")
 }
 
-// yankToClipboard copies the visual selection to system clipboard
-// using OSC 52 escape sequence. Writes to /dev/tty.
-// Returns nil even if no selection (just writes "").
-func (b *Buf) yankToClipboard() error {
-	text := b.visualText()
+// yankText sends text to the system clipboard via OSC 52 escape sequence.
+func yankText(text string) error {
 	encoded := base64.StdEncoding.EncodeToString([]byte(text))
-
 	f, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-
 	_, err = fmt.Fprintf(f, "\033]52;c;%s\033\\", encoded)
-	if err != nil {
+	return err
+}
+
+// yankToClipboard copies the visual selection to system clipboard.
+func (b *Buf) yankToClipboard() error {
+	text := b.visualText()
+	if err := yankText(text); err != nil {
 		return err
 	}
-
-	// Clear selection after successful yank.
 	b.selStartLine = -1
 	return nil
 }

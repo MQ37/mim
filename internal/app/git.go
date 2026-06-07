@@ -5,8 +5,17 @@ package app
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
+)
+
+const (
+	// Virtual commit hash for uncommitted changes (staged + unstaged).
+	hashUnstaged = "__unstaged__"
+	hashStaged   = "__staged__"
 )
 
 // minCommitLineLen = 40-char SHA + space + ≥1 char subject.
@@ -23,7 +32,12 @@ func (a *App) enterGitMode() {
 	}
 
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	commits := make([]Commit, 0, len(lines))
+	commits := make([]Commit, 2, len(lines)+2) // +2 for unstaged+staged
+
+	// Prepend virtual entries.
+	commits[0] = Commit{hash: hashUnstaged, subject: "Unstaged changes"}
+	commits[1] = Commit{hash: hashStaged, subject: "Staged changes"}
+
 	for _, line := range lines {
 		if len(line) < minCommitLineLen {
 			continue
@@ -72,56 +86,45 @@ func (g *GitState) clearSelection() {
 	g.diffLines = nil
 }
 
-// computeDiff runs git diff for the selected commit range.
+// computeDiff runs git diff for the selected range (including virtual entries).
 func (a *App) computeDiff() {
 	g := a.Git
 	if g.selStart < 0 || g.selStart >= len(g.commits) || g.selEnd >= len(g.commits) {
 		return
 	}
 
-	// git log outputs newest-first, so smaller index = newer commit.
-	oldest := g.commits[g.selEnd].hash   // larger index = older
-	newest := g.commits[g.selStart].hash // smaller index = newer
-
 	g.loadingDiff = true
+	defer func() { g.loadingDiff = false }()
 	g.diffLines = nil
 	g.diffCursor = 0
 	g.diffScr = 0
+	g.diffSelStart = -1
 
-	var out []byte
-	var err error
-
+	// Check if selection includes the virtual uncommitted entry.
 	if g.selStart == g.selEnd {
-		// Single commit: use git show (handles root commit correctly).
-		cmd := exec.Command("git", "-C", a.Tree.RootPath,
-			"show", "--color=always", oldest)
-		out, err = cmd.Output()
-	} else {
-		// Range: oldest~1..newest
-		rangeSpec := oldest + "~1.." + newest
-		cmd := exec.Command("git", "-C", a.Tree.RootPath,
-			"diff", "--color=always", rangeSpec)
-		out, err = cmd.Output()
-		if err != nil {
-			// Fallback for root commit in range.
-			cmd2 := exec.Command("git", "-C", a.Tree.RootPath,
-				"diff", "--color=always", oldest+".."+newest)
-			out, err = cmd2.Output()
+		switch g.commits[g.selStart].hash {
+		case hashUnstaged:
+			a.runUnstagedDiff(&g.diffLines)
+			return
+		case hashStaged:
+			a.runGitDiff(&g.diffLines, "diff", "--cached", "--color=always")
+			return
 		}
 	}
 
-	g.loadingDiff = false
+	// Regular commit range.
+	oldest := g.commits[g.selEnd].hash
+	newest := g.commits[g.selStart].hash
 
-	raw := strings.TrimRight(string(out), "\n")
-	if raw == "" {
-		g.diffLines = nil
+	if g.selStart == g.selEnd {
+		if oldest == hashUnstaged || oldest == hashStaged {
+			return
+		}
+		a.runGitShow(oldest, &g.diffLines)
 	} else {
-		g.diffLines = strings.Split(raw, "\n")
+		a.runGitRangeDiff(oldest, newest, &g.diffLines)
 	}
-
-	if err != nil && g.diffLines == nil {
-		a.StatusMsg = "git diff failed: " + err.Error()
-	}
+	g.loadingDiff = false
 }
 
 // handleGitKey dispatches keys in git mode.
@@ -259,17 +262,26 @@ func (a *App) handleDiffViewKey(seq []byte) {
 		if g.diffCursor < maxIdx {
 			g.diffCursor++
 		}
+		if g.diffSelStart != -1 {
+			g.diffSelEnd = g.diffCursor
+		}
 		a.ensureDiffVisible()
 
 	case 'k':
 		if g.diffCursor > 0 {
 			g.diffCursor--
 		}
+		if g.diffSelStart != -1 {
+			g.diffSelEnd = g.diffCursor
+		}
 		a.ensureDiffVisible()
 
 	case 'g':
 		g.diffCursor = 0
 		g.diffScr = 0
+		if g.diffSelStart != -1 {
+			g.diffSelEnd = 0
+		}
 
 	case 'G':
 		g.diffCursor = maxIdx
@@ -277,20 +289,55 @@ func (a *App) handleDiffViewKey(seq []byte) {
 		if g.diffScr < 0 {
 			g.diffScr = 0
 		}
+		if g.diffSelStart != -1 {
+			g.diffSelEnd = maxIdx
+		}
 
-	case 0x04: // Ctrl-D — half page down
+	case 0x04: // Ctrl-D
 		g.diffCursor += (a.TermH - 1) / 2
 		if g.diffCursor > maxIdx {
 			g.diffCursor = maxIdx
 		}
+		if g.diffSelStart != -1 {
+			g.diffSelEnd = g.diffCursor
+		}
 		a.ensureDiffVisible()
 
-	case 0x15: // Ctrl-U — half page up
+	case 0x15: // Ctrl-U
 		g.diffCursor -= (a.TermH - 1) / 2
 		if g.diffCursor < 0 {
 			g.diffCursor = 0
 		}
+		if g.diffSelStart != -1 {
+			g.diffSelEnd = g.diffCursor
+		}
 		a.ensureDiffVisible()
+
+	case 'v', 'V':
+		// Toggle visual selection in diff (linewise only).
+		if g.diffSelStart == -1 {
+			g.diffSelStart = g.diffCursor
+			g.diffSelEnd = g.diffCursor
+		} else {
+			g.diffSelStart = -1
+		}
+
+	case 'y':
+		// Yank selected diff lines to clipboard.
+		if g.diffSelStart != -1 {
+			from, to := g.diffSelStart, g.diffSelEnd
+			if from > to {
+				from, to = to, from
+			}
+			if to >= len(g.diffLines) {
+				to = len(g.diffLines) - 1
+			}
+			text := strings.Join(g.diffLines[from:to+1], "\n")
+			yankText(text)
+			n := to - from + 1
+			a.StatusMsg = "yanked " + strconv.Itoa(n) + " lines"
+			g.diffSelStart = -1
+		}
 	}
 }
 
@@ -323,6 +370,11 @@ func (a *App) renderGitView(out *bytes.Buffer) {
 		} else if g.diffLines == nil {
 			if row == (a.TermH-2)/2 {
 				out.WriteString("v — select commits, Enter — view diff")
+			}
+			out.WriteString(clearToEOL())
+		} else if len(g.diffLines) == 0 {
+			if row == (a.TermH-2)/2 {
+				out.WriteString("No changes")
 			}
 			out.WriteString(clearToEOL())
 		} else if row < len(g.diffLines)-g.diffScr {
@@ -380,16 +432,107 @@ func (a *App) renderDiffRow(out *bytes.Buffer, row int) {
 
 	line := g.diffLines[idx]
 
+	// Selection highlighting (yellow bg).
+	inDiffSel := g.diffSelStart != -1 &&
+		idx >= min(g.diffSelStart, g.diffSelEnd) &&
+		idx <= max(g.diffSelStart, g.diffSelEnd)
+
 	if idx == g.diffCursor {
 		out.WriteString(ansiReverse)
+	} else if inDiffSel {
+		out.WriteString(setBg(colorYellow))
 	}
 
 	line = truncateVisible(line, availW)
 	out.WriteString(line)
 
-	if idx == g.diffCursor {
+	if idx == g.diffCursor || inDiffSel {
 		out.WriteString(ansiReset)
 	}
 
 	out.WriteString(clearToEOL())
+}
+
+func (a *App) runGitDiff(lines *[]string, args ...string) {
+	cmd := exec.Command("git", append([]string{"-C", a.Tree.RootPath}, args...)...)
+	out, _ := cmd.Output()
+	raw := strings.TrimRight(string(out), "\n")
+	if raw == "" {
+		*lines = []string{} // empty diff, not nil
+	} else {
+		*lines = strings.Split(raw, "\n")
+	}
+}
+
+func (a *App) runGitShow(hash string, lines *[]string) {
+	cmd := exec.Command("git", "-C", a.Tree.RootPath, "show", "--color=always", hash)
+	out, _ := cmd.Output()
+	raw := strings.TrimRight(string(out), "\n")
+	if raw == "" {
+		*lines = []string{}
+	} else {
+		*lines = strings.Split(raw, "\n")
+	}
+}
+
+func (a *App) runGitRangeDiff(oldest, newest string, lines *[]string) {
+	rangeSpec := oldest + "~1.." + newest
+	cmd := exec.Command("git", "-C", a.Tree.RootPath, "diff", "--color=always", rangeSpec)
+	out, err := cmd.Output()
+	if err != nil {
+		cmd2 := exec.Command("git", "-C", a.Tree.RootPath, "diff", "--color=always", oldest+".."+newest)
+		out, _ = cmd2.Output()
+	}
+	raw := strings.TrimRight(string(out), "\n")
+	if raw == "" {
+		*lines = []string{}
+	} else {
+		*lines = strings.Split(raw, "\n")
+	}
+}
+
+func (a *App) runUnstagedDiff(lines *[]string) {
+	*lines = nil
+
+	// Tracked changes: git diff HEAD.
+	cmd := exec.Command("git", "-C", a.Tree.RootPath, "diff", "HEAD", "--color=always")
+	out, _ := cmd.Output()
+	raw := strings.TrimRight(string(out), "\n")
+	if raw != "" {
+		*lines = append(*lines, strings.Split(raw, "\n")...)
+	}
+
+	// Untracked files: git ls-files --others --exclude-standard.
+	untrackedCmd := exec.Command("git", "-C", a.Tree.RootPath,
+		"ls-files", "--others", "--exclude-standard")
+	untrackedOut, _ := untrackedCmd.Output()
+	untracked := strings.Split(strings.TrimSpace(string(untrackedOut)), "\n")
+
+	for _, f := range untracked {
+		if f == "" {
+			continue
+		}
+		// Read the file content and show as additions.
+		data, err := os.ReadFile(filepath.Join(a.Tree.RootPath, f))
+		if err != nil {
+			continue
+		}
+		// Diff header.
+		green := "\033[32m"
+		reset := "\033[0m"
+		if len(*lines) > 0 {
+			*lines = append(*lines, "")
+		}
+		*lines = append(*lines, "diff --git a/"+f+" b/"+f)
+		*lines = append(*lines, "new file mode 100644")
+		*lines = append(*lines, "--- /dev/null")
+		*lines = append(*lines, "+++ b/"+f)
+		for _, l := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+			*lines = append(*lines, green+"+"+reset+l)
+		}
+	}
+
+	if len(*lines) == 0 {
+		*lines = []string{}
+	}
 }

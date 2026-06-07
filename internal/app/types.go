@@ -79,9 +79,11 @@ type GitState struct {
 	selEnd   int
 
 	// Diff output (right pane, replaces Buf)
-	diffLines  []string // raw lines from git diff --color=always
-	diffCursor int      // cursor line in diff (0-indexed)
-	diffScr    int      // first visible diff line
+	diffLines    []string // raw lines from git diff --color=always
+	diffCursor   int      // cursor line in diff (0-indexed)
+	diffScr      int      // first visible diff line
+	diffSelStart int      // visual selection start line, -1 = no selection
+	diffSelEnd   int      // visual selection end line (inclusive)
 
 	loadingDiff bool
 }
