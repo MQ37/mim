@@ -148,10 +148,19 @@ func highlightLine(line string, lang int, blockComment bool) ([]Segment, bool) {
 			return segs, blockComment
 		}
 
-		// Triple-quoted string (Python) or backtick (Go, TS).
+		// Triple-quoted strings (Python).
 		if c == '"' && i+2 < n && line[i+1] == '"' && line[i+2] == '"' {
-			// Find closing """
 			end := strings.Index(line[i+3:], "\"\"\"")
+			if end == -1 {
+				addSeg(i, n, hlString)
+				return segs, blockComment
+			}
+			addSeg(i, i+end+6, hlString)
+			i = i + end + 6
+			continue
+		}
+		if c == '\'' && i+2 < n && line[i+1] == '\'' && line[i+2] == '\'' {
+			end := strings.Index(line[i+3:], "'''")
 			if end == -1 {
 				addSeg(i, n, hlString)
 				return segs, blockComment

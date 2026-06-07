@@ -265,7 +265,6 @@ func (t *Tree) expandCurrent() {
 	n.open = !n.open
 }
 
-// collapseCurrent closes the selected directory.  No-op for files.
 // readDir reads directory entries from dirPath, applies .gitignore filtering
 // when showAll is false, and returns a sorted slice of Nodes.
 func readDir(dirPath string, showAll bool) []*Node {

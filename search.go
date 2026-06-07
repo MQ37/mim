@@ -77,11 +77,10 @@ func (a *App) handleFindInputKey(seq []byte) {
 		utf8Accum = append(utf8Accum, seq...)
 		r, size := utf8.DecodeRune(utf8Accum)
 		if r != utf8.RuneError && size > 0 {
-			// Successfully decoded a complete rune.
 			a.insertFindRune(r)
 			utf8Accum = nil
-		} else if r == utf8.RuneError && size == 0 {
-			// Invalid start byte or corruption — discard accumulator.
+		} else if r == utf8.RuneError {
+			// Invalid or incomplete — discard.
 			utf8Accum = nil
 		}
 		// If size > len(utf8Accum), the sequence is incomplete; keep accumulating.

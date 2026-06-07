@@ -2,7 +2,11 @@
 
 package main
 
-import "bytes"
+import (
+	"bytes"
+	"strconv"
+	"strings"
+)
 
 // viewerPendingG tracks whether the previous key in viewer mode was 'g',
 // enabling detection of the two-key 'gg' sequence.
@@ -206,7 +210,8 @@ func (a *App) handleViewerKey(seq []byte) {
 			if err := a.buf.yankToClipboard(); err != nil {
 				a.statusMsg = "yank failed"
 			} else {
-				a.statusMsg = "yanked N lines"
+				n := strings.Count(a.buf.visualText(), "\n") + 1
+				a.statusMsg = "yanked " + strconv.Itoa(n) + " lines"
 			}
 			a.buf.selStartLine = -1 // clear selection
 		}
