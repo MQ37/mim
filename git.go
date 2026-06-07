@@ -368,6 +368,9 @@ func (a *App) renderGitView(out *bytes.Buffer) {
 			out.WriteString(clearToEOL())
 		} else if row < len(g.diffLines)-g.diffScr {
 			a.renderDiffRow(out, row)
+		} else {
+			// Past the end of diff — clear the row.
+			out.WriteString(clearToEOL())
 		}
 	}
 }
@@ -380,6 +383,7 @@ func (a *App) renderCommitRow(out *bytes.Buffer, row int) {
 
 	if idx >= len(g.commits) {
 		out.WriteString(strings.Repeat(" ", treeContentW))
+		out.WriteString(clearToEOL())
 		return
 	}
 
@@ -401,6 +405,7 @@ func (a *App) renderCommitRow(out *bytes.Buffer, row int) {
 	if inSelection || idx == g.commitCur {
 		out.WriteString(ansiReset)
 	}
+	out.WriteString(clearToEOL())
 }
 
 // renderDiffRow draws one row of the diff output.
@@ -410,6 +415,7 @@ func (a *App) renderDiffRow(out *bytes.Buffer, row int) {
 	availW := a.termW - a.treeW - 1
 
 	if idx >= len(g.diffLines) {
+		out.WriteString(clearToEOL())
 		return
 	}
 
