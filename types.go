@@ -49,7 +49,6 @@ type Tree struct {
 	flat     []*Node // cached flattened view of expanded nodes
 	cursor   int     // index into flat (selected node)
 	scr      int     // first visible index in flat
-	dirty    bool    // flat needs rebuild (set on expand/collapse)
 	rootPath string  // absolute path passed to newTree
 	showAll  bool    // toggle: include gitignored files when true
 }

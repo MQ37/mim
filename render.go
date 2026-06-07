@@ -25,7 +25,6 @@ const (
 	colorYellow  = 3
 	colorBlue    = 4
 	colorWhite   = 7
-	colorGrey    = 8
 	colorStatus  = 12
 )
 

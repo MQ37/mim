@@ -6,12 +6,15 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+var treePendingG bool
 
 // treeShowAll is a package-level flag read by newTree so the fixed-signature
 // newTree(rootPath string) can still honour the showAll toggle without
@@ -35,7 +38,7 @@ func newTree(rootPath string) (*Tree, error) {
 		if err != nil {
 			return nil, err
 		}
-		return nil, os.ErrNotExist
+		return nil, fmt.Errorf("%s: not a directory", rootPath)
 	}
 
 	t := &Tree{
@@ -226,7 +229,6 @@ func sortKids(n *Node) {
 func (t *Tree) buildFlat() {
 	t.flat = t.flat[:0]
 	t.walkFlat(t.root)
-	t.dirty = false
 }
 
 func (t *Tree) walkFlat(n *Node) {
@@ -261,7 +263,6 @@ func (t *Tree) expandCurrent() {
 		n.kids = readDir(n.path, t.showAll)
 	}
 	n.open = !n.open
-	t.dirty = true
 }
 
 // collapseCurrent closes the selected directory.  No-op for files.
@@ -350,6 +351,11 @@ func isIgnored(name string, patterns []string) bool {
 func (a *App) handleTreeKey(seq []byte) {
 	t := &a.tree
 
+	// Clear gg pending state on any non-'g' key.
+	if !bytes.Equal(seq, []byte{'g'}) {
+		treePendingG = false
+	}
+
 	switch {
 	// j — move cursor down
 	case bytes.Equal(seq, []byte{'j'}):
@@ -365,10 +371,15 @@ func (a *App) handleTreeKey(seq []byte) {
 		}
 		a.ensureTreeVisible()
 
-	// gg — jump to top
-	case bytes.Equal(seq, []byte{'g', 'g'}):
-		t.cursor = 0
-		t.scr = 0
+	// gg — two-key jump to top.
+	case bytes.Equal(seq, []byte{'g'}):
+		if treePendingG {
+			t.cursor = 0
+			t.scr = 0
+			treePendingG = false
+		} else {
+			treePendingG = true
+		}
 
 	// G — jump to bottom
 	case bytes.Equal(seq, []byte{'G'}):
@@ -420,7 +431,7 @@ func (a *App) handleTreeKey(seq []byte) {
 			treeShowAll = a.tree.showAll
 		}
 
-	// All other keys — silently ignored.
+	// Tree navigation — j/k/Enter handle movement.
 	}
 }
 
