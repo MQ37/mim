@@ -2,7 +2,7 @@
 // Renders into a bytes.Buffer and writes to stdout in a single syscall.
 // Uses ABSOLUTE cursor positioning via cursorMove() to prevent pane overlap.
 
-package main
+package app
 
 import (
 	"bytes"
@@ -191,32 +191,32 @@ func visualCol(rawLine string, byteOffset int) int {
 // render draws the complete frame: tree pane, separator, viewer/find overlay,
 // and status bar. Everything is built into a bytes.Buffer and written to
 // stdout in a single Write call.
-func (a *App) render() {
+func (a *App) Render() {
 	var buf bytes.Buffer
 
 	buf.WriteString(ansiHideCursor)
 
 	// Git mode overrides the standard layout.
-	if a.git != nil {
+	if a.Git != nil {
 		a.renderGitView(&buf)
 		a.renderStatus(&buf)
 		// Cursor in git mode.
-		if a.git.diffLines != nil {
-			visRow := a.git.diffCursor - a.git.diffScr
+		if a.Git.diffLines != nil {
+			visRow := a.Git.diffCursor - a.Git.diffScr
 			if visRow < 0 {
 				visRow = 0
 			}
-			if visRow >= a.termH-1 {
-				visRow = a.termH - 2
+			if visRow >= a.TermH-1 {
+				visRow = a.TermH - 2
 			}
-			buf.WriteString(cursorMove(visRow+1, a.treeW+2))
+			buf.WriteString(cursorMove(visRow+1, a.TreeW+2))
 		} else {
-			visRow := a.git.commitCur - a.git.commitScr
+			visRow := a.Git.commitCur - a.Git.commitScr
 			if visRow < 0 {
 				visRow = 0
 			}
-			if visRow >= a.termH-1 {
-				visRow = a.termH - 2
+			if visRow >= a.TermH-1 {
+				visRow = a.TermH - 2
 			}
 			buf.WriteString(cursorMove(visRow+1, 1))
 		}
@@ -227,18 +227,18 @@ func (a *App) render() {
 
 	// Row-major loop: tree pane, separator, viewer pane for each visible row.
 	viewerCol := 1 // 1-indexed column where viewer starts
-	if a.treeVisible {
-		viewerCol = a.treeW + 2
+	if a.TreeVisible {
+		viewerCol = a.TreeW + 2
 	}
 
-	for row := 0; row < a.termH-1; row++ {
-		if a.treeVisible {
-			// Tree pane: columns 0..treeW-1 (0-indexed). Start at 1-indexed col 1.
+	for row := 0; row < a.TermH-1; row++ {
+		if a.TreeVisible {
+			// Tree pane: columns 0..TreeW-1 (0-indexed). Start at 1-indexed col 1.
 			buf.WriteString(cursorMove(row+1, 1))
 			a.renderTreeLine(&buf, row)
 
 			// Vertical separator at 0-indexed column treeW = 1-indexed treeW+1.
-			buf.WriteString(cursorMove(row+1, a.treeW+1))
+			buf.WriteString(cursorMove(row+1, a.TreeW+1))
 			buf.WriteString(ansiDim)
 			buf.WriteString("│")
 			buf.WriteString(ansiReset)
@@ -246,7 +246,7 @@ func (a *App) render() {
 
 		// Viewer / find pane.
 		buf.WriteString(cursorMove(row+1, viewerCol))
-		if a.focus == FindInputFocus || a.focus == FindResultsFocus {
+		if a.Focus == FindInputFocus || a.Focus == FindResultsFocus {
 			// Overlays are drawn separately below — skip viewer for these rows.
 			buf.WriteString(clearToEOL()) // clear stale overlay area
 		} else {
@@ -256,9 +256,9 @@ func (a *App) render() {
 	}
 
 	// Draw overlays on top of the viewer area (they use absolute positioning).
-	if a.focus == FindInputFocus {
+	if a.Focus == FindInputFocus {
 		a.renderFindInput(&buf)
-	} else if a.focus == FindResultsFocus {
+	} else if a.Focus == FindResultsFocus {
 		a.renderFindResults(&buf)
 	}
 
@@ -266,31 +266,31 @@ func (a *App) render() {
 	a.renderStatus(&buf)
 
 	// Final cursor position.
-	switch a.focus {
+	switch a.Focus {
 	case TreeFocus:
-		visRow := a.tree.cursor - a.tree.scr
+		visRow := a.Tree.cursor - a.Tree.scr
 		if visRow < 0 {
 			visRow = 0
 		}
-		if visRow >= a.termH-1 {
-			visRow = a.termH - 2
+		if visRow >= a.TermH-1 {
+			visRow = a.TermH - 2
 		}
 		buf.WriteString(cursorMove(visRow+1, 1))
 
 	case ViewerFocus:
-		if a.buf != nil {
-			visRow := a.buf.cy - a.buf.scr
+		if a.Buf != nil {
+			visRow := a.Buf.cy - a.Buf.scr
 			if visRow < 0 {
 				visRow = 0
 			}
-			if visRow >= a.termH-1 {
-				visRow = a.termH - 2
+			if visRow >= a.TermH-1 {
+				visRow = a.TermH - 2
 			}
-			visCol := a.buf.cursorCol()
+			visCol := a.Buf.cursorCol()
 			// Viewer starts at 1-indexed column 1 (hidden) or treeW+2 (visible).
 			vc := 1
-			if a.treeVisible {
-				vc = a.treeW + 2
+			if a.TreeVisible {
+				vc = a.TreeW + 2
 			}
 			buf.WriteString(cursorMove(visRow+1, vc+visCol))
 		}
@@ -311,20 +311,20 @@ func (a *App) render() {
 // The line is padded to treeW-1 characters to prevent spill into the separator.
 // Does NOT move the cursor; the caller (render()) positions it first.
 func (a *App) renderTreeLine(out *bytes.Buffer, row int) {
-	idx := a.tree.scr + row
-	treeContentW := a.treeW // content width, fills to separator
+	idx := a.Tree.scr + row
+	treeContentW := a.TreeW // content width, fills to separator
 
-	if idx >= len(a.tree.flat) {
+	if idx >= len(a.Tree.flat) {
 		out.WriteString(strings.Repeat(" ", treeContentW))
 		return
 	}
 
-	node := a.tree.flat[idx]
+	node := a.Tree.flat[idx]
 
 	// Compute indent depth: count path separators relative to root.
 	rel := node.path
-	if strings.HasPrefix(rel, a.tree.rootPath) {
-		rel = rel[len(a.tree.rootPath):]
+	if strings.HasPrefix(rel, a.Tree.RootPath) {
+		rel = rel[len(a.Tree.RootPath):]
 	}
 	// Trim leading separator so root children are at indent 0.
 	rel = strings.TrimPrefix(rel, string(os.PathSeparator))
@@ -348,7 +348,7 @@ func (a *App) renderTreeLine(out *bytes.Buffer, row int) {
 	line := prefix + node.name
 
 	// Highlight selected line.
-	if idx == a.tree.cursor {
+	if idx == a.Tree.cursor {
 		out.WriteString(ansiReverse)
 	}
 
@@ -357,7 +357,7 @@ func (a *App) renderTreeLine(out *bytes.Buffer, row int) {
 	line = truncate(line, treeContentW)
 	out.WriteString(line)
 
-	if idx == a.tree.cursor {
+	if idx == a.Tree.cursor {
 		out.WriteString(ansiReset)
 	}
 }
@@ -368,18 +368,18 @@ func (a *App) renderTreeLine(out *bytes.Buffer, row int) {
 // Handles cursor-line highlight, visual selection, tab expansion, and the
 // "no file open" placeholder.
 func (a *App) renderViewerRow(out *bytes.Buffer, row int) {
-	availW := a.termW // available columns for viewer content
-	if a.treeVisible {
-		availW = a.termW - a.treeW - 1
+	availW := a.TermW // available columns for viewer content
+	if a.TreeVisible {
+		availW = a.TermW - a.TreeW - 1
 	}
 	if availW < 1 {
 		return
 	}
 
 	// No file open — show placeholder centered on screen.
-	if a.buf == nil {
+	if a.Buf == nil {
 		msg := "no file open"
-		if row == a.termH/2 {
+		if row == a.TermH/2 {
 			pad := (availW - len(msg)) / 2
 			if pad < 0 {
 				pad = 0
@@ -390,10 +390,10 @@ func (a *App) renderViewerRow(out *bytes.Buffer, row int) {
 		return
 	}
 
-	lineIdx := a.buf.scr + row
-	if lineIdx >= a.buf.LineCount() {
+	lineIdx := a.Buf.scr + row
+	if lineIdx >= a.Buf.LineCount() {
 		// Past EOF — show tilde on first empty line (like vim).
-		if lineIdx == a.buf.LineCount() {
+		if lineIdx == a.Buf.LineCount() {
 			out.WriteString(ansiDim)
 			out.WriteByte('~')
 			out.WriteString(ansiReset)
@@ -401,12 +401,12 @@ func (a *App) renderViewerRow(out *bytes.Buffer, row int) {
 		return
 	}
 
-	rawLine := a.buf.Line(lineIdx)
+	rawLine := a.Buf.Line(lineIdx)
 	displayLine := tabExpand(rawLine)
 	displayLine = truncate(displayLine, availW)
 
-	cursorLine := lineIdx == a.buf.cy
-	selActive := a.buf.selStartLine != -1
+	cursorLine := lineIdx == a.Buf.cy
+	selActive := a.Buf.selStartLine != -1
 
 	// If this is the cursor line, reverse-video the whole line.
 	if cursorLine {
@@ -420,8 +420,8 @@ func (a *App) renderViewerRow(out *bytes.Buffer, row int) {
 	if selActive {
 		// Build highlighted version for display (preserve rawLine for offset math).
 		hlDisplay := displayLine
-		if a.buf.hlLang != 0 && lineIdx < len(a.buf.hlSegments) {
-			hlLine := applyHighlight(rawLine, a.buf.hlSegments[lineIdx])
+		if a.Buf.hlLang != 0 && lineIdx < len(a.Buf.hlSegments) {
+			hlLine := applyHighlight(rawLine, a.Buf.hlSegments[lineIdx])
 			hlLine = tabExpandAnsi(hlLine)
 			hlDisplay = truncateVisible(hlLine, availW)
 		}
@@ -430,8 +430,8 @@ func (a *App) renderViewerRow(out *bytes.Buffer, row int) {
 	}
 
 	// Plain line — apply syntax highlighting if available.
-	if a.buf.hlLang != 0 && lineIdx < len(a.buf.hlSegments) {
-		hlLine := applyHighlight(rawLine, a.buf.hlSegments[lineIdx])
+	if a.Buf.hlLang != 0 && lineIdx < len(a.Buf.hlSegments) {
+		hlLine := applyHighlight(rawLine, a.Buf.hlSegments[lineIdx])
 		hlLine = tabExpandAnsi(hlLine)
 		hlLine = truncateVisible(hlLine, availW)
 		out.WriteString(hlLine)
@@ -445,8 +445,8 @@ func (a *App) renderViewerRow(out *bytes.Buffer, row int) {
 // visual modes.
 func (a *App) renderViewerRowSelection(out *bytes.Buffer, rawLine, displayLine string, lineIdx int) {
 	// Normalize selection range so (lineFrom,colFrom) ≤ (lineTo,colTo).
-	lineFrom, lineTo := a.buf.selStartLine, a.buf.selEndLine
-	colFrom, colTo := a.buf.selStartCol, a.buf.selEndCol
+	lineFrom, lineTo := a.Buf.selStartLine, a.Buf.selEndLine
+	colFrom, colTo := a.Buf.selStartCol, a.Buf.selEndCol
 	if lineFrom > lineTo || (lineFrom == lineTo && colFrom > colTo) {
 		lineFrom, lineTo = lineTo, lineFrom
 		colFrom, colTo = colTo, colFrom
@@ -459,7 +459,7 @@ func (a *App) renderViewerRowSelection(out *bytes.Buffer, rawLine, displayLine s
 	}
 
 	// Linewise selection: highlight the entire line.
-	if a.buf.selLinewise {
+	if a.Buf.selLinewise {
 		out.WriteString(setBg(colorYellow))
 		out.WriteString(displayLine)
 		out.WriteString(ansiReset)
@@ -520,18 +520,18 @@ func (a *App) renderViewerRowSelection(out *bytes.Buffer, rawLine, displayLine s
 
 // renderStatus draws the bottom status line on row termH (1-indexed).
 func (a *App) renderStatus(out *bytes.Buffer) {
-	out.WriteString(cursorMove(a.termH, 1))
+	out.WriteString(cursorMove(a.TermH, 1))
 	out.WriteString(setBg(colorStatus))
 	out.WriteString(setFg(colorWhite))
 
 	// Build the status mode text.
 	var status string
-	if a.statusMsg != "" {
-		status = a.statusMsg
-		a.statusMsg = "" // clear after displaying
+	if a.StatusMsg != "" {
+		status = a.StatusMsg
+		a.StatusMsg = "" // clear after displaying
 	} else {
-		if a.git != nil {
-			g := a.git
+		if a.Git != nil {
+			g := a.Git
 			if g.diffLines != nil {
 				status = "-- DIFF: " + g.commits[g.selStart].hash[:8] + ".." + g.commits[g.selEnd].hash[:8] + " --"
 			} else if g.selStart != -1 {
@@ -545,12 +545,12 @@ func (a *App) renderStatus(out *bytes.Buffer) {
 				status = "-- GIT: " + strconv.Itoa(len(g.commits)) + " commits --"
 			}
 		} else {
-		switch a.focus {
+		switch a.Focus {
 		case TreeFocus:
 			status = "-- TREE --"
 		case ViewerFocus:
-			if a.buf != nil && a.buf.selStartLine != -1 {
-				if a.buf.selLinewise {
+			if a.Buf != nil && a.Buf.selStartLine != -1 {
+				if a.Buf.selLinewise {
 					status = "-- VISUAL LINE --"
 				} else {
 					status = "-- VISUAL --"
@@ -568,15 +568,15 @@ func (a *App) renderStatus(out *bytes.Buffer) {
 
 	// Build left-aligned file info.
 	var leftText string
-	if a.buf != nil && a.buf.path != "" {
-		leftText = a.buf.path + "  L" + strconv.Itoa(a.buf.cy+1) + ":C" + strconv.Itoa(a.buf.cursorCol()+1)
+	if a.Buf != nil && a.Buf.path != "" {
+		leftText = a.Buf.path + "  L" + strconv.Itoa(a.Buf.cy+1) + ":C" + strconv.Itoa(a.Buf.cursorCol()+1)
 	} else {
-		leftText = a.tree.rootPath
+		leftText = a.Tree.RootPath
 	}
 
 	// Left text + right-aligned status, padded/truncated to terminal width.
-	full := padRight(leftText, a.termW-len(status)-1) + " " + status
-	full = truncate(full, a.termW)
+	full := padRight(leftText, a.TermW-len(status)-1) + " " + status
+	full = truncate(full, a.TermW)
 	out.WriteString(full)
 
 	out.WriteString(ansiReset)

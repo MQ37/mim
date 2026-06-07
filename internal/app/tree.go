@@ -1,7 +1,7 @@
 // tree.go — file tree: build via git ls-files, expand/collapse, navigation,
 // and rendering with ANSI escapes. All stdlib only.
 
-package main
+package app
 
 import (
 	"bufio"
@@ -17,7 +17,7 @@ import (
 var treePendingG bool
 
 // treeShowAll is a package-level flag read by newTree so the fixed-signature
-// newTree(rootPath string) can still honour the showAll toggle without
+// NewTree(RootPath string) can still honour the showAll toggle without
 // changing its parameter list. handleTreeKey sets this before calling newTree.
 var treeShowAll bool
 
@@ -29,7 +29,7 @@ var treeShowAll bool
 // git repository and use "git ls-files" for a fast, correctly-filtered
 // listing.  When git is not available it falls back to filepath.WalkDir with
 // a best-effort .gitignore parser.
-func newTree(rootPath string) (*Tree, error) {
+func NewTree(rootPath string) (*Tree, error) {
 	rootPath, err := filepath.Abs(rootPath)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func newTree(rootPath string) (*Tree, error) {
 	}
 
 	t := &Tree{
-		rootPath: rootPath,
+		RootPath: rootPath,
 		showAll:  treeShowAll,
 		root: &Node{
 			name:  filepath.Base(rootPath),
@@ -69,11 +69,11 @@ func newTree(rootPath string) (*Tree, error) {
 	return t, nil
 }
 
-// findGitRoot walks up from path looking for a .git entry (file or directory).
+// findGitRoot walks up from path looking for a .Git entry (file or directory).
 // Returns the repository root and true, or ("", false) if none found.
 func findGitRoot(path string) (string, bool) {
 	for {
-		gitEnt := filepath.Join(path, ".git")
+		gitEnt := filepath.Join(path, ".Git")
 		if _, err := os.Stat(gitEnt); err == nil {
 			return path, true
 		}
@@ -87,8 +87,8 @@ func findGitRoot(path string) (string, bool) {
 }
 
 // buildFromGit runs "git ls-files" from gitRoot and populates t.root.kids.
-// When rootPath is a subdirectory of gitRoot, output is filtered to only
-// include paths under rootPath and the git-root-relative prefix is stripped.
+// When RootPath is a subdirectory of gitRoot, output is filtered to only
+// include paths under RootPath and the git-root-relative prefix is stripped.
 func (t *Tree) buildFromGit(gitRoot string) error {
 	args := []string{"-C", gitRoot, "ls-files", "--cached", "--others"}
 	if !t.showAll {
@@ -103,8 +103,8 @@ func (t *Tree) buildFromGit(gitRoot string) error {
 		return err
 	}
 
-	// Compute how rootPath sits relative to gitRoot.
-	prefix, _ := filepath.Rel(gitRoot, t.rootPath)
+	// Compute how RootPath sits relative to gitRoot.
+	prefix, _ := filepath.Rel(gitRoot, t.RootPath)
 	if prefix == "." {
 		prefix = ""
 	} else {
@@ -136,18 +136,18 @@ func (t *Tree) buildFromGit(gitRoot string) error {
 func (t *Tree) buildFromWalk() error {
 	var rootPatterns []string
 	if !t.showAll {
-		rootPatterns = loadGitignore(t.rootPath)
+		rootPatterns = loadGitignore(t.RootPath)
 	}
 
-	return filepath.WalkDir(t.rootPath, func(path string, d os.DirEntry, err error) error {
+	return filepath.WalkDir(t.RootPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
-		if path == t.rootPath {
+		if path == t.RootPath {
 			return nil
 		}
 		name := d.Name()
-		if name == ".git" {
+		if name == ".Git" {
 			return filepath.SkipDir
 		}
 
@@ -158,7 +158,7 @@ func (t *Tree) buildFromWalk() error {
 			return nil
 		}
 
-		rel, err := filepath.Rel(t.rootPath, path)
+		rel, err := filepath.Rel(t.RootPath, path)
 		if err != nil {
 			return nil
 		}
@@ -281,7 +281,7 @@ func readDir(dirPath string, showAll bool) []*Node {
 	var nodes []*Node
 	for _, e := range entries {
 		name := e.Name()
-		if name == "." || name == ".." || name == ".git" {
+		if name == "." || name == ".." || name == ".Git" {
 			continue
 		}
 		if !showAll && isIgnored(name, patterns) {
@@ -346,9 +346,9 @@ func isIgnored(name string, patterns []string) bool {
 // Keyboard handling (TreeFocus)
 // ---------------------------------------------------------------------------
 
-// handleTreeKey processes a keypress when focus is TreeFocus.
+// handleTreeKey processes a keypress when Focus is TreeFocus.
 func (a *App) handleTreeKey(seq []byte) {
-	t := &a.tree
+	t := &a.Tree
 
 	// Clear gg pending state on any non-'g' key.
 	if !bytes.Equal(seq, []byte{'g'}) {
@@ -400,34 +400,34 @@ func (a *App) handleTreeKey(seq []byte) {
 		} else {
 			buf, err := openFile(n.path)
 			if err != nil {
-				a.statusMsg = err.Error()
+				a.StatusMsg = err.Error()
 				return
 			}
-			a.buf = buf
-			a.focus = ViewerFocus
+			a.Buf = buf
+			a.Focus = ViewerFocus
 		}
 
-	// Escape — switch focus to viewer
+	// Escape — switch Focus to viewer
 	case bytes.Equal(seq, []byte{0x1b}):
-		a.focus = ViewerFocus
+		a.Focus = ViewerFocus
 
 	// Ctrl-A (0x01) — toggle showAll and rebuild tree
 	case bytes.Equal(seq, []byte{0x01}):
-		rootPath := a.tree.rootPath
-		treeShowAll = !a.tree.showAll
-		newT, err := newTree(rootPath)
+		rootPath := a.Tree.RootPath
+		treeShowAll = !a.Tree.showAll
+		newT, err := NewTree(rootPath)
 		if err == nil {
-			a.tree = *newT
+			a.Tree = *newT
 			// Clamp cursor into range of the new flat.
-			if a.tree.cursor >= len(a.tree.flat) {
-				a.tree.cursor = 0
+			if a.Tree.cursor >= len(a.Tree.flat) {
+				a.Tree.cursor = 0
 			}
-			if a.tree.scr >= len(a.tree.flat) {
-				a.tree.scr = 0
+			if a.Tree.scr >= len(a.Tree.flat) {
+				a.Tree.scr = 0
 			}
 		} else {
 			// Restore flag on failure so UI stays consistent.
-			treeShowAll = a.tree.showAll
+			treeShowAll = a.Tree.showAll
 		}
 
 	// Tree navigation — j/k/Enter handle movement.
@@ -437,7 +437,7 @@ func (a *App) handleTreeKey(seq []byte) {
 // ensureTreeVisible adjusts t.scr so that t.cursor is visible in the tree
 // pane (visible height = termH - 2).
 func (a *App) ensureTreeVisible() {
-	clampScroll(a.tree.cursor, &a.tree.scr, a.termH-1, len(a.tree.flat))
+	clampScroll(a.Tree.cursor, &a.Tree.scr, a.TermH-1, len(a.Tree.flat))
 }
 
 // ---------------------------------------------------------------------------

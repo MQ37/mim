@@ -1,7 +1,7 @@
 // Git diff view — commit list + range diff.
 // Ctrl+G enters/exits. v anchors selection, movement extends, Enter computes diff.
 
-package main
+package app
 
 import (
 	"bytes"
@@ -14,11 +14,11 @@ const minCommitLineLen = 42
 
 // enterGitMode loads the commit list and switches to git view.
 func (a *App) enterGitMode() {
-	cmd := exec.Command("git", "-C", a.tree.rootPath,
+	cmd := exec.Command("git", "-C", a.Tree.RootPath,
 		"log", "--format=%H %s", "-n", "200")
 	out, err := cmd.Output()
 	if err != nil {
-		a.statusMsg = "git log failed: " + err.Error()
+		a.StatusMsg = "git log failed: " + err.Error()
 		return
 	}
 
@@ -35,18 +35,18 @@ func (a *App) enterGitMode() {
 	}
 
 	if len(commits) == 0 {
-		a.statusMsg = "no commits"
+		a.StatusMsg = "no commits"
 		return
 	}
 
-	a.git = &GitState{
+	a.Git = &GitState{
 		commits:   commits,
 		commitCur: 0,
 		selAnchor: -1,
 		selStart:  -1,
 		selEnd:    -1,
 	}
-	a.focus = TreeFocus // commit list occupies tree pane
+	a.Focus = TreeFocus // commit list occupies tree pane
 }
 
 // updateSelection recomputes selStart/selEnd from selAnchor and commitCur.
@@ -74,7 +74,7 @@ func (g *GitState) clearSelection() {
 
 // computeDiff runs git diff for the selected commit range.
 func (a *App) computeDiff() {
-	g := a.git
+	g := a.Git
 	if g.selStart < 0 || g.selStart >= len(g.commits) || g.selEnd >= len(g.commits) {
 		return
 	}
@@ -93,18 +93,18 @@ func (a *App) computeDiff() {
 
 	if g.selStart == g.selEnd {
 		// Single commit: use git show (handles root commit correctly).
-		cmd := exec.Command("git", "-C", a.tree.rootPath,
+		cmd := exec.Command("git", "-C", a.Tree.RootPath,
 			"show", "--color=always", oldest)
 		out, err = cmd.Output()
 	} else {
 		// Range: oldest~1..newest
 		rangeSpec := oldest + "~1.." + newest
-		cmd := exec.Command("git", "-C", a.tree.rootPath,
+		cmd := exec.Command("git", "-C", a.Tree.RootPath,
 			"diff", "--color=always", rangeSpec)
 		out, err = cmd.Output()
 		if err != nil {
 			// Fallback for root commit in range.
-			cmd2 := exec.Command("git", "-C", a.tree.rootPath,
+			cmd2 := exec.Command("git", "-C", a.Tree.RootPath,
 				"diff", "--color=always", oldest+".."+newest)
 			out, err = cmd2.Output()
 		}
@@ -120,13 +120,13 @@ func (a *App) computeDiff() {
 	}
 
 	if err != nil && g.diffLines == nil {
-		a.statusMsg = "git diff failed: " + err.Error()
+		a.StatusMsg = "git diff failed: " + err.Error()
 	}
 }
 
 // handleGitKey dispatches keys in git mode.
 func (a *App) handleGitKey(seq []byte) {
-	g := a.git
+	g := a.Git
 	if g == nil {
 		return
 	}
@@ -137,8 +137,8 @@ func (a *App) handleGitKey(seq []byte) {
 			g.clearSelection() // also clears diffLines
 			return
 		}
-		a.git = nil
-		a.focus = TreeFocus
+		a.Git = nil
+		a.Focus = TreeFocus
 		return
 	}
 
@@ -154,12 +154,12 @@ func (a *App) handleGitKey(seq []byte) {
 
 
 func (a *App) ensureCommitVisible() {
-	clampScroll(a.git.commitCur, &a.git.commitScr, a.termH-1, len(a.git.commits))
+	clampScroll(a.Git.commitCur, &a.Git.commitScr, a.TermH-1, len(a.Git.commits))
 }
 
 // handleCommitListKey handles keys when browsing the commit list.
 func (a *App) handleCommitListKey(seq []byte) {
-	g := a.git
+	g := a.Git
 	if len(seq) != 1 || len(g.commits) == 0 {
 		return
 	}
@@ -197,7 +197,7 @@ func (a *App) handleCommitListKey(seq []byte) {
 		if g.selAnchor != -1 {
 			g.updateSelection()
 		}
-		g.commitScr = g.commitCur - (a.termH - 1) + 1
+		g.commitScr = g.commitCur - (a.TermH - 1) + 1
 		if g.commitScr < 0 {
 			g.commitScr = 0
 		}
@@ -219,7 +219,7 @@ func (a *App) handleCommitListKey(seq []byte) {
 		a.computeDiff()
 
 	case 0x04: // Ctrl-D — half page down
-		g.commitCur += (a.termH - 1) / 2
+		g.commitCur += (a.TermH - 1) / 2
 		if g.commitCur > maxIdx {
 			g.commitCur = maxIdx
 		}
@@ -229,7 +229,7 @@ func (a *App) handleCommitListKey(seq []byte) {
 		a.ensureCommitVisible()
 
 	case 0x15: // Ctrl-U — half page up
-		g.commitCur -= (a.termH - 1) / 2
+		g.commitCur -= (a.TermH - 1) / 2
 		if g.commitCur < 0 {
 			g.commitCur = 0
 		}
@@ -242,12 +242,12 @@ func (a *App) handleCommitListKey(seq []byte) {
 
 
 func (a *App) ensureDiffVisible() {
-	clampScroll(a.git.diffCursor, &a.git.diffScr, a.termH-1, len(a.git.diffLines))
+	clampScroll(a.Git.diffCursor, &a.Git.diffScr, a.TermH-1, len(a.Git.diffLines))
 }
 
 // handleDiffViewKey handles keys when viewing diff output.
 func (a *App) handleDiffViewKey(seq []byte) {
-	g := a.git
+	g := a.Git
 	if len(seq) != 1 || len(g.diffLines) == 0 {
 		return
 	}
@@ -273,20 +273,20 @@ func (a *App) handleDiffViewKey(seq []byte) {
 
 	case 'G':
 		g.diffCursor = maxIdx
-		g.diffScr = g.diffCursor - (a.termH - 1) + 1
+		g.diffScr = g.diffCursor - (a.TermH - 1) + 1
 		if g.diffScr < 0 {
 			g.diffScr = 0
 		}
 
 	case 0x04: // Ctrl-D — half page down
-		g.diffCursor += (a.termH - 1) / 2
+		g.diffCursor += (a.TermH - 1) / 2
 		if g.diffCursor > maxIdx {
 			g.diffCursor = maxIdx
 		}
 		a.ensureDiffVisible()
 
 	case 0x15: // Ctrl-U — half page up
-		g.diffCursor -= (a.termH - 1) / 2
+		g.diffCursor -= (a.TermH - 1) / 2
 		if g.diffCursor < 0 {
 			g.diffCursor = 0
 		}
@@ -297,31 +297,31 @@ func (a *App) handleDiffViewKey(seq []byte) {
 
 // renderGitView draws the full git mode layout: commit list + diff.
 func (a *App) renderGitView(out *bytes.Buffer) {
-	g := a.git
+	g := a.Git
 	if g == nil {
 		return
 	}
 
-	for row := 0; row < a.termH-1; row++ {
+	for row := 0; row < a.TermH-1; row++ {
 		// Left: commit list (same column as tree pane).
 		out.WriteString(cursorMove(row+1, 1))
 		a.renderCommitRow(out, row)
 
 		// Separator.
-		out.WriteString(cursorMove(row+1, a.treeW+1))
+		out.WriteString(cursorMove(row+1, a.TreeW+1))
 		out.WriteString(ansiDim)
 		out.WriteString("│")
 		out.WriteString(ansiReset)
 
 		// Right: diff viewer or placeholder.
-		out.WriteString(cursorMove(row+1, a.treeW+2))
+		out.WriteString(cursorMove(row+1, a.TreeW+2))
 		if g.loadingDiff {
-			if row == (a.termH-2)/2 {
+			if row == (a.TermH-2)/2 {
 				out.WriteString("Computing diff...")
 			}
 			out.WriteString(clearToEOL())
 		} else if g.diffLines == nil {
-			if row == (a.termH-2)/2 {
+			if row == (a.TermH-2)/2 {
 				out.WriteString("v — select commits, Enter — view diff")
 			}
 			out.WriteString(clearToEOL())
@@ -336,9 +336,9 @@ func (a *App) renderGitView(out *bytes.Buffer) {
 
 // renderCommitRow draws one row of the commit list.
 func (a *App) renderCommitRow(out *bytes.Buffer, row int) {
-	g := a.git
+	g := a.Git
 	idx := g.commitScr + row
-	treeContentW := a.treeW
+	treeContentW := a.TreeW
 
 	if idx >= len(g.commits) {
 		out.WriteString(strings.Repeat(" ", treeContentW))
@@ -369,9 +369,9 @@ func (a *App) renderCommitRow(out *bytes.Buffer, row int) {
 
 // renderDiffRow draws one row of the diff output.
 func (a *App) renderDiffRow(out *bytes.Buffer, row int) {
-	g := a.git
+	g := a.Git
 	idx := g.diffScr + row
-	availW := a.termW - a.treeW - 1
+	availW := a.TermW - a.TreeW - 1
 
 	if idx >= len(g.diffLines) {
 		out.WriteString(clearToEOL())

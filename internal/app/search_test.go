@@ -1,5 +1,5 @@
 // search_test.go — tests for parseGrepOutput (grep --null output parsing).
-package main
+package app
 
 import (
 	"testing"

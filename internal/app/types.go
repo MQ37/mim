@@ -1,8 +1,6 @@
 // Types and constants shared across all files.
 
-package main
-
-import "syscall"
+package app
 
 // Focus — which UI pane or overlay owns keyboard input.
 type Focus int
@@ -49,7 +47,7 @@ type Tree struct {
 	flat     []*Node // cached flattened view of expanded nodes
 	cursor   int     // index into flat (selected node)
 	scr      int     // first visible index in flat
-	rootPath string  // absolute path passed to newTree
+	RootPath string  // absolute path passed to newTree
 	showAll  bool    // toggle: include gitignored files when true
 }
 
@@ -91,16 +89,16 @@ type GitState struct {
 // App is the global application state.
 type App struct {
 	// File tree (left pane)
-	tree Tree
+	Tree Tree
 
 	// Code viewer (center/right pane, nil when no file open)
-	buf *Buf
+	Buf *Buf
 
 	// Tree visibility (Ctrl+E toggles)
-	treeVisible bool
+	TreeVisible bool
 
 	// Which pane/overlay owns input
-	focus Focus
+	Focus Focus
 
 	// Find / search state (overlay)
 	findQuery   []rune // text typed by user
@@ -111,23 +109,17 @@ type App struct {
 	findRunning bool   // grep subprocess still running
 
 	// Terminal geometry (updated on SIGWINCH)
-	termW int // total columns
-	termH int // total rows
-	treeW int // left pane width (computed as termW * 30 / 100, clamped)
+	TermW int // total columns
+	TermH int // total rows
+	TreeW int // left pane width (computed as termW * 30 / 100, clamped)
 
 	// Status line
-	statusMsg string // temporary message shown instead of default status
+	StatusMsg string // temporary message shown instead of default status
 
-	// Git diff view state. When non-nil, the UI switches to git mode:
-	// left pane = commit list, right pane = diff viewer.
-	git *GitState
+	// Git diff view state. When non-nil, the UI switches to git mode.
+	Git *GitState
 
 	// Lifecycle
-	quit bool
+	Quit bool
 }
 
-// termState holds saved terminal attributes for restore on exit.
-// Vendored from golang.org/x/term for Linux.
-type termState struct {
-	termios syscall.Termios
-}

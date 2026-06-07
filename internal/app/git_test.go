@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"os"
@@ -94,30 +94,30 @@ func TestGitClearSelection(t *testing.T) {
 func TestGitEnterExit(t *testing.T) {
 	dir := initTestRepo(t)
 
-	app := &App{termW: 80, termH: 24}
-	app.tree.rootPath = dir
-	app.treeW = 25
+	app := &App{TermW: 80, TermH: 24}
+	app.Tree.RootPath = dir
+	app.TreeW = 25
 
 	app.enterGitMode()
-	if app.git == nil {
+	if app.Git == nil {
 		t.Fatal("enterGitMode: git state is nil")
 	}
-	if len(app.git.commits) != 2 {
-		t.Fatalf("expected 2 commits, got %d", len(app.git.commits))
+	if len(app.Git.commits) != 2 {
+		t.Fatalf("expected 2 commits, got %d", len(app.Git.commits))
 	}
-	if app.git.commits[0].subject != "second commit" {
-		t.Errorf("HEAD should be second commit, got %q", app.git.commits[0].subject)
+	if app.Git.commits[0].subject != "second commit" {
+		t.Errorf("HEAD should be second commit, got %q", app.Git.commits[0].subject)
 	}
-	if app.git.commits[1].subject != "first commit" {
-		t.Errorf("second entry should be first commit, got %q", app.git.commits[1].subject)
+	if app.Git.commits[1].subject != "first commit" {
+		t.Errorf("second entry should be first commit, got %q", app.Git.commits[1].subject)
 	}
-	if app.git.selAnchor != -1 || app.git.selStart != -1 {
+	if app.Git.selAnchor != -1 || app.Git.selStart != -1 {
 		t.Error("no selection should be active on enter")
 	}
 
 	// Exit.
-	app.git = nil
-	if app.git != nil {
+	app.Git = nil
+	if app.Git != nil {
 		t.Error("exitGitMode: git state not cleared")
 	}
 }
@@ -125,13 +125,13 @@ func TestGitEnterExit(t *testing.T) {
 func TestGitComputeDiff(t *testing.T) {
 	dir := initTestRepo(t)
 
-	app := &App{termW: 80, termH: 24}
-	app.tree.rootPath = dir
-	app.treeW = 25
+	app := &App{TermW: 80, TermH: 24}
+	app.Tree.RootPath = dir
+	app.TreeW = 25
 	app.enterGitMode()
 
 	// Select first commit (HEAD) and diff it.
-	g := app.git
+	g := app.Git
 	g.selAnchor = 0
 	g.updateSelection()
 	app.computeDiff()
@@ -166,11 +166,11 @@ func TestGitComputeDiff(t *testing.T) {
 func TestGitKeyDispatch(t *testing.T) {
 	dir := initTestRepo(t)
 
-	app := &App{termW: 80, termH: 24}
-	app.tree.rootPath = dir
-	app.treeW = 25
+	app := &App{TermW: 80, TermH: 24}
+	app.Tree.RootPath = dir
+	app.TreeW = 25
 	app.enterGitMode()
-	g := app.git
+	g := app.Git
 
 	// j — move down.
 	g.commitCur = 0
@@ -226,7 +226,7 @@ func TestGitKeyDispatch(t *testing.T) {
 
 	// ESC from commit list with no selection — exits git mode.
 	app.handleGitKey([]byte{0x1b})
-	if app.git != nil {
+	if app.Git != nil {
 		t.Error("ESC from commit list: git mode should exit")
 	}
 }
@@ -234,27 +234,27 @@ func TestGitKeyDispatch(t *testing.T) {
 func TestGitSelectionRangeOnMovement(t *testing.T) {
 	dir := initTestRepo(t)
 
-	app := &App{termW: 80, termH: 24}
-	app.tree.rootPath = dir
-	app.treeW = 25
+	app := &App{TermW: 80, TermH: 24}
+	app.Tree.RootPath = dir
+	app.TreeW = 25
 	app.enterGitMode()
 
 	// Anchor at commit 1 (older), move to 0 (newer) — selection spans [0,1].
-	app.git.selAnchor = 1
-	app.git.commitCur = 0
-	app.git.updateSelection()
-	if app.git.selStart != 0 || app.git.selEnd != 1 {
+	app.Git.selAnchor = 1
+	app.Git.commitCur = 0
+	app.Git.updateSelection()
+	if app.Git.selStart != 0 || app.Git.selEnd != 1 {
 		t.Errorf("anchor=1,cur=0: want [0,1] (normalized), got [%d,%d]",
-			app.git.selStart, app.git.selEnd)
+			app.Git.selStart, app.Git.selEnd)
 	}
 
 	// Anchor at 0, move to 1 — same result after normalization.
-	app.git.selAnchor = 0
-	app.git.commitCur = 1
-	app.git.updateSelection()
-	if app.git.selStart != 0 || app.git.selEnd != 1 {
+	app.Git.selAnchor = 0
+	app.Git.commitCur = 1
+	app.Git.updateSelection()
+	if app.Git.selStart != 0 || app.Git.selEnd != 1 {
 		t.Errorf("anchor=0,cur=1: want [0,1], got [%d,%d]",
-			app.git.selStart, app.git.selEnd)
+			app.Git.selStart, app.Git.selEnd)
 	}
 }
 

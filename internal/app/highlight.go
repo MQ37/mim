@@ -1,6 +1,6 @@
 // Character-by-character scanner, no regex, no external deps.
 
-package main
+package app
 
 import "strings"
 

@@ -7,88 +7,83 @@ import (
 	"os/signal"
 	"syscall"
 	"unsafe"
+
+	"github.com/MQ37/mim/internal/app"
 )
+
+type termState struct {
+	termios syscall.Termios
+}
 
 func main() {
 	if err := run(); err != nil {
-		// Terminal is already restored by defer in run().
-		// Write error to stderr, which should still work.
 		os.Stderr.WriteString("mim: " + err.Error() + "\n")
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	// Enter raw mode.
 	oldState, err := makeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		return err
 	}
 	defer restore(int(os.Stdin.Fd()), oldState)
 
-	// Hide cursor on exit (best-effort).
 	defer os.Stdout.WriteString("\033[?25h\033[?1049l\033[0m")
 
-	// Enter alternate screen, hide cursor.
 	os.Stdout.WriteString("\033[?1049h\033[?25l")
 	os.Stdout.WriteString("\033[2J\033[H")
 
-	// Get terminal size.
 	tw, th, err := getTermSize(int(os.Stdin.Fd()))
 	if err != nil {
 		tw, th = 80, 24
 	}
 
-	app := &App{
-		termW:      tw,
-		termH:      th,
-		treeVisible: true,
+	a := &app.App{
+		TermW:       tw,
+		TermH:       th,
+		TreeVisible: true,
 	}
-	app.treeW = tw * 30 / 100
-	if app.treeW < 15 {
-		app.treeW = 15
+	a.TreeW = tw * 30 / 100
+	if a.TreeW < 15 {
+		a.TreeW = 15
 	}
-	if app.treeW > 40 {
-		app.treeW = 40
+	if a.TreeW > 40 {
+		a.TreeW = 40
 	}
 
-	// SIGWINCH handling.
 	sigwinch := make(chan os.Signal, 1)
 	signal.Notify(sigwinch, syscall.SIGWINCH)
 
-	// Initial tree build from cwd.
 	cwd, _ := os.Getwd()
-	t, err := newTree(cwd)
+	t, err := app.NewTree(cwd)
 	if err != nil {
-		t = &Tree{rootPath: cwd}
+		t = &app.Tree{RootPath: cwd}
 	}
-	app.tree = *t
-	app.focus = TreeFocus
+	a.Tree = *t
+	a.Focus = app.TreeFocus
 
-	// Render initial frame.
-	app.render()
+	a.Render()
 
-	// Main event loop.
-	for !app.quit {
+	for !a.Quit {
 		key := readKey()
 		if key == nil {
 			select {
 			case <-sigwinch:
-				app.handleResize()
-				app.render()
+				handleResize(a)
+				a.Render()
 			default:
 			}
 			continue
 		}
 
-		app.dispatch(key)
-		app.render()
+		a.Dispatch(key)
+		a.Render()
 
-		// Drain any pending SIGWINCH after render.
 		select {
 		case <-sigwinch:
-			app.handleResize()
-			app.render()
+			handleResize(a)
+			a.Render()
 		default:
 		}
 	}
@@ -96,24 +91,21 @@ func run() error {
 	return nil
 }
 
-// handleResize updates terminal dimensions from the OS.
-func (a *App) handleResize() {
+func handleResize(a *app.App) {
 	tw, th, err := getTermSize(int(os.Stdin.Fd()))
 	if err != nil || tw <= 0 || th <= 0 {
 		return
 	}
-	a.termW = tw
-	a.termH = th
-	a.treeW = tw * 30 / 100
-	if a.treeW < 15 {
-		a.treeW = 15
+	a.TermW = tw
+	a.TermH = th
+	a.TreeW = tw * 30 / 100
+	if a.TreeW < 15 {
+		a.TreeW = 15
 	}
-	if a.treeW > 40 {
-		a.treeW = 40
+	if a.TreeW > 40 {
+		a.TreeW = 40
 	}
 }
-
-// --- Terminal raw mode (vendored from golang.org/x/term for Linux) ---
 
 func makeRaw(fd int) (*termState, error) {
 	var t syscall.Termios
@@ -122,7 +114,6 @@ func makeRaw(fd int) (*termState, error) {
 		return nil, errno
 	}
 	oldState := termState{termios: t}
-
 	t.Iflag &^= syscall.IGNBRK | syscall.BRKINT | syscall.PARMRK | syscall.ISTRIP | syscall.INLCR | syscall.IGNCR | syscall.ICRNL | syscall.IXON
 	t.Oflag &^= syscall.OPOST
 	t.Lflag &^= syscall.ECHO | syscall.ECHONL | syscall.ICANON | syscall.ISIG | syscall.IEXTEN
@@ -130,7 +121,6 @@ func makeRaw(fd int) (*termState, error) {
 	t.Cflag |= syscall.CS8
 	t.Cc[syscall.VMIN] = 1
 	t.Cc[syscall.VTIME] = 0
-
 	_, _, errno = syscall.Syscall6(syscall.SYS_IOCTL, uintptr(fd), syscall.TCSETS, uintptr(unsafe.Pointer(&t)), 0, 0, 0)
 	if errno != 0 {
 		return nil, errno
@@ -160,11 +150,6 @@ func getTermSize(fd int) (int, int, error) {
 	return int(ws.col), int(ws.row), nil
 }
 
-// --- Keyboard input ---
-
-// readKey reads a single keypress from stdin and returns the raw byte sequence.
-// For regular keys this is a 1-byte slice. Escape sequences (arrows, etc.)
-// are multi-byte. Returns nil on error (e.g. stdin closed).
 func readKey() []byte {
 	var buf [1]byte
 	n, err := os.Stdin.Read(buf[:])
@@ -175,8 +160,6 @@ func readKey() []byte {
 		return buf[:]
 	}
 
-	// ESC received — check if it starts an escape sequence.
-	// Use syscall.Read with O_NONBLOCK to avoid mixing os.File with raw fcntl.
 	syscall.SetNonblock(0, true)
 	defer syscall.SetNonblock(0, false)
 
@@ -193,5 +176,3 @@ func readKey() []byte {
 	}
 	return seq
 }
-
-

@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"os"
@@ -90,45 +90,45 @@ func TestEnsureTreeVisible(t *testing.T) {
 		t.Fatalf("flat too short: %d entries (need >=51 for root + 50 files)", len(tree.flat))
 	}
 
-	app := &App{tree: *tree, termH: 24}
+	app := &App{Tree: *tree, TermH: 24}
 
 	// Invariant: after ensureTreeVisible, cursor must be within [scr, scr+visibleH).
-	visibleH := app.termH - 1
+	visibleH := app.TermH - 1
 
 	// Cursor at 0, scr at 0 — no change.
-	app.tree.cursor = 0
-	app.tree.scr = 0
+	app.Tree.cursor = 0
+	app.Tree.scr = 0
 	app.ensureTreeVisible()
-	if app.tree.scr != 0 {
-		t.Errorf("cursor=0, scr should stay 0, got %d", app.tree.scr)
+	if app.Tree.scr != 0 {
+		t.Errorf("cursor=0, scr should stay 0, got %d", app.Tree.scr)
 	}
 
 	// Cursor at 46, scr at 0 — ensureVisible must scroll to show it.
-	app.tree.cursor = 46
-	app.tree.scr = 0
+	app.Tree.cursor = 46
+	app.Tree.scr = 0
 	app.ensureTreeVisible()
-	if app.tree.cursor < app.tree.scr || app.tree.cursor >= app.tree.scr+visibleH {
-		t.Errorf("cursor %d not visible with scr=%d (visibleH=%d, flat=%d)", app.tree.cursor, app.tree.scr, visibleH, len(app.tree.flat))
+	if app.Tree.cursor < app.Tree.scr || app.Tree.cursor >= app.Tree.scr+visibleH {
+		t.Errorf("cursor %d not visible with scr=%d (visibleH=%d, flat=%d)", app.Tree.cursor, app.Tree.scr, visibleH, len(app.Tree.flat))
 	}
 
 	// Cursor below current scr — must scroll up.
-	app.tree.cursor = 5
-	app.tree.scr = 30
+	app.Tree.cursor = 5
+	app.Tree.scr = 30
 	app.ensureTreeVisible()
-	if app.tree.cursor < app.tree.scr || app.tree.cursor >= app.tree.scr+visibleH {
-		t.Errorf("cursor %d not visible with scr=%d (visibleH=%d)", app.tree.cursor, app.tree.scr, visibleH)
+	if app.Tree.cursor < app.Tree.scr || app.Tree.cursor >= app.Tree.scr+visibleH {
+		t.Errorf("cursor %d not visible with scr=%d (visibleH=%d)", app.Tree.cursor, app.Tree.scr, visibleH)
 	}
 
 	// Scr beyond upper bound — must clamp.
-	app.tree.cursor = 10
-	app.tree.scr = 100
+	app.Tree.cursor = 10
+	app.Tree.scr = 100
 	app.ensureTreeVisible()
-	maxScr := len(app.tree.flat) - visibleH
+	maxScr := len(app.Tree.flat) - visibleH
 	if maxScr < 0 {
 		maxScr = 0
 	}
-	if app.tree.scr > maxScr {
-		t.Errorf("scr=%d exceeds maxScr=%d", app.tree.scr, maxScr)
+	if app.Tree.scr > maxScr {
+		t.Errorf("scr=%d exceeds maxScr=%d", app.Tree.scr, maxScr)
 	}
 }
 
@@ -141,9 +141,9 @@ func TestNewTree(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test"), 0644)
 	os.WriteFile(filepath.Join(dir, "src", "helper.go"), []byte("package main"), 0644)
 
-	tree, err := newTree(dir)
+	tree, err := NewTree(dir)
 	if err != nil {
-		t.Fatalf("newTree(%q) failed: %v", dir, err)
+		t.Fatalf("NewTree(%q) failed: %v", dir, err)
 	}
 
 	if tree.root == nil {
@@ -152,8 +152,8 @@ func TestNewTree(t *testing.T) {
 	if !tree.root.isDir {
 		t.Error("root should be a directory")
 	}
-	if tree.rootPath != dir {
-		t.Errorf("rootPath = %q, want %q", tree.rootPath, dir)
+	if tree.RootPath != dir {
+		t.Errorf("rootPath = %q, want %q", tree.RootPath, dir)
 	}
 }
 
@@ -169,7 +169,7 @@ func buildTreeFromPaths(paths []string) *Tree {
 			isDir: true,
 			open:  true,
 		},
-		rootPath: ".",
+		RootPath: ".",
 		showAll:  false,
 	}
 

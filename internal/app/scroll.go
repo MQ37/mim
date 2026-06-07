@@ -1,6 +1,6 @@
 // scroll.go — shared scroll-boundary math.
 
-package main
+package app
 
 // clampScroll adjusts *scr so that cursor (0-indexed) is visible within
 // a viewport of height rows, given maxItems total items. Returns the

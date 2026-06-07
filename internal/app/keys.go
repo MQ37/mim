@@ -1,6 +1,6 @@
 // Key dispatch and viewer-mode vim keybindings.
 
-package main
+package app
 
 import (
 	"bytes"
@@ -16,31 +16,31 @@ var viewerPendingG bool
 
 // dispatch is the central input router. Called on every keypress.
 // First checks global keys (q, Ctrl-T, Ctrl-F).
-// Then routes to mode-specific handler based on a.focus.
-func (a *App) dispatch(seq []byte) {
+// Then routes to mode-specific handler based on a.Focus.
+func (a *App) Dispatch(seq []byte) {
 	// Global keys first (take priority everywhere).
 	if a.handleGlobalKey(seq) {
 		return
 	}
 
 	// Git mode — route to git handler.
-	if a.git != nil {
+	if a.Git != nil {
 		a.handleGitKey(seq)
 		return
 	}
 
 	// When tree is hidden, ViewerFocus is the only focus.
-	if !a.treeVisible && a.focus == TreeFocus {
-		a.focus = ViewerFocus
+	if !a.TreeVisible && a.Focus == TreeFocus {
+		a.Focus = ViewerFocus
 	}
 
-	// Reset pending-g when focus is not viewer (e.g., after Ctrl-T away).
-	if a.focus != ViewerFocus {
+	// Reset pending-g when Focus is not viewer (e.g., after Ctrl-T away).
+	if a.Focus != ViewerFocus {
 		viewerPendingG = false
 	}
 
 	// Mode-specific dispatch.
-	switch a.focus {
+	switch a.Focus {
 	case TreeFocus:
 		a.handleTreeKey(seq)
 	case ViewerFocus:
@@ -54,7 +54,7 @@ func (a *App) dispatch(seq []byte) {
 
 // --- Global keys ---
 
-// handleGlobalKey handles keys that work in ANY focus mode.
+// handleGlobalKey handles keys that work in ANY Focus mode.
 // Returns true if the key was consumed (preventing further dispatch).
 func (a *App) handleGlobalKey(seq []byte) bool {
 	if len(seq) != 1 {
@@ -62,32 +62,32 @@ func (a *App) handleGlobalKey(seq []byte) bool {
 	}
 	switch seq[0] {
 	case 'q': // 0x71 — quit
-		a.quit = true
+		a.Quit = true
 		return true
-	case 0x14: // Ctrl-T — toggle focus between TreeFocus and ViewerFocus
-		if a.focus == TreeFocus {
-			if a.buf != nil {
-				a.focus = ViewerFocus
+	case 0x14: // Ctrl-T — toggle Focus between TreeFocus and ViewerFocus
+		if a.Focus == TreeFocus {
+			if a.Buf != nil {
+				a.Focus = ViewerFocus
 			}
-		} else if a.treeVisible {
-			a.focus = TreeFocus
+		} else if a.TreeVisible {
+			a.Focus = TreeFocus
 		}
 		return true
 	case 0x05: // Ctrl-E — toggle tree visibility
-		a.treeVisible = !a.treeVisible
-		if a.treeVisible {
-			a.focus = TreeFocus
-		} else if a.buf != nil {
-			a.focus = ViewerFocus
+		a.TreeVisible = !a.TreeVisible
+		if a.TreeVisible {
+			a.Focus = TreeFocus
+		} else if a.Buf != nil {
+			a.Focus = ViewerFocus
 		} else {
-			// No file open — keep tree visible, focus stays on tree.
-			a.treeVisible = true
+			// No file open — keep tree visible, Focus stays on tree.
+			a.TreeVisible = true
 		}
 		return true
 	case 0x07: // Ctrl-G — toggle git diff view
-		if a.git != nil {
-			a.git = nil
-			a.focus = TreeFocus
+		if a.Git != nil {
+			a.Git = nil
+			a.Focus = TreeFocus
 		} else {
 			a.enterGitMode()
 		}
@@ -101,17 +101,17 @@ func (a *App) handleGlobalKey(seq []byte) bool {
 
 // --- Viewer key handler ---
 
-// handleViewerKey handles keys when focus is ViewerFocus.
+// handleViewerKey handles keys when Focus is ViewerFocus.
 // Implements vim-like navigation, visual selection, and yank.
 func (a *App) handleViewerKey(seq []byte) {
-	if a.buf == nil {
+	if a.Buf == nil {
 		return
 	}
 
 	// --- Escape clears selection or is ignored ---
 	if bytes.Equal(seq, []byte{0x1b}) {
-		if a.buf.selStartLine != -1 {
-			a.buf.selStartLine = -1 // clear selection
+		if a.Buf.selStartLine != -1 {
+			a.Buf.selStartLine = -1 // clear selection
 		}
 		viewerPendingG = false
 		return
@@ -121,9 +121,9 @@ func (a *App) handleViewerKey(seq []byte) {
 	if len(seq) == 1 && seq[0] == 'g' {
 		if viewerPendingG {
 			// gg — jump to first line
-			a.buf.cy = 0
-			a.buf.clampCursor()
-			a.buf.ensureVisible(a.termH - 1)
+			a.Buf.cy = 0
+			a.Buf.clampCursor()
+			a.Buf.ensureVisible(a.TermH - 1)
 			viewerPendingG = false
 			a.updateVisualEnd()
 			return
@@ -144,76 +144,76 @@ func (a *App) handleViewerKey(seq []byte) {
 
 	switch seq[0] {
 	case 'h': // 0x68 — left
-		a.buf.cx--
-		a.buf.clampCursor()
+		a.Buf.cx--
+		a.Buf.clampCursor()
 		isMovement = true
 	case 'j': // 0x6a — down
-		a.buf.cy++
-		a.buf.clampCursor()
-		a.buf.ensureVisible(a.termH - 1)
+		a.Buf.cy++
+		a.Buf.clampCursor()
+		a.Buf.ensureVisible(a.TermH - 1)
 		isMovement = true
 	case 'k': // 0x6b — up
-		a.buf.cy--
-		a.buf.clampCursor()
-		a.buf.ensureVisible(a.termH - 1)
+		a.Buf.cy--
+		a.Buf.clampCursor()
+		a.Buf.ensureVisible(a.TermH - 1)
 		isMovement = true
 	case 'l': // 0x6c — right
-		a.buf.cx++
-		a.buf.clampCursor()
+		a.Buf.cx++
+		a.Buf.clampCursor()
 		isMovement = true
 	case 'G': // 0x47 — jump to last line
-		a.buf.cy = a.buf.LineCount() - 1
-		a.buf.clampCursor()
-		a.buf.ensureVisible(a.termH - 1)
+		a.Buf.cy = a.Buf.LineCount() - 1
+		a.Buf.clampCursor()
+		a.Buf.ensureVisible(a.TermH - 1)
 		isMovement = true
 	case '0': // 0x30 — jump to column 0
-		a.buf.cx = 0
-		a.buf.clampCursor()
+		a.Buf.cx = 0
+		a.Buf.clampCursor()
 		isMovement = true
 	case '$': // 0x24 — jump to end of line
-		a.buf.cx = len(a.buf.Line(a.buf.cy))
-		a.buf.clampCursor()
+		a.Buf.cx = len(a.Buf.Line(a.Buf.cy))
+		a.Buf.clampCursor()
 		isMovement = true
 	case 0x04: // Ctrl-D — half page down
-		a.buf.cy += (a.termH - 1) / 2
-		a.buf.clampCursor()
-		a.buf.ensureVisible(a.termH - 1)
+		a.Buf.cy += (a.TermH - 1) / 2
+		a.Buf.clampCursor()
+		a.Buf.ensureVisible(a.TermH - 1)
 		isMovement = true
 	case 0x15: // Ctrl-U — half page up
-		a.buf.cy -= (a.termH - 1) / 2
-		a.buf.clampCursor()
-		a.buf.ensureVisible(a.termH - 1)
+		a.Buf.cy -= (a.TermH - 1) / 2
+		a.Buf.clampCursor()
+		a.Buf.ensureVisible(a.TermH - 1)
 		isMovement = true
 	case 0x02: // Ctrl-B — page up
-		a.buf.cy -= (a.termH - 1)
-		a.buf.clampCursor()
-		a.buf.ensureVisible(a.termH - 1)
+		a.Buf.cy -= (a.TermH - 1)
+		a.Buf.clampCursor()
+		a.Buf.ensureVisible(a.TermH - 1)
 		isMovement = true
 
 	// --- Visual mode ---
 	case 'v': // 0x76 — charwise visual mode
-		a.buf.selStartLine = a.buf.cy
-		a.buf.selStartCol = a.buf.cx
-		a.buf.selEndLine = a.buf.cy
-		a.buf.selEndCol = a.buf.cx
-		a.buf.selLinewise = false
+		a.Buf.selStartLine = a.Buf.cy
+		a.Buf.selStartCol = a.Buf.cx
+		a.Buf.selEndLine = a.Buf.cy
+		a.Buf.selEndCol = a.Buf.cx
+		a.Buf.selLinewise = false
 	case 'V': // 0x56 — linewise visual mode
-		a.buf.selStartLine = a.buf.cy
-		a.buf.selStartCol = 0
-		a.buf.selEndLine = a.buf.cy
-		a.buf.selEndCol = 0
-		a.buf.selLinewise = true
+		a.Buf.selStartLine = a.Buf.cy
+		a.Buf.selStartCol = 0
+		a.Buf.selEndLine = a.Buf.cy
+		a.Buf.selEndCol = 0
+		a.Buf.selLinewise = true
 
 	// --- Yank ---
 	case 'y': // 0x79 — yank selection
-		if a.buf.selStartLine != -1 {
-			if err := a.buf.yankToClipboard(); err != nil {
-				a.statusMsg = "yank failed"
+		if a.Buf.selStartLine != -1 {
+			if err := a.Buf.yankToClipboard(); err != nil {
+				a.StatusMsg = "yank failed"
 			} else {
-				n := strings.Count(a.buf.visualText(), "\n") + 1
-				a.statusMsg = "yanked " + strconv.Itoa(n) + " lines"
+				n := strings.Count(a.Buf.visualText(), "\n") + 1
+				a.StatusMsg = "yanked " + strconv.Itoa(n) + " lines"
 			}
-			a.buf.selStartLine = -1 // clear selection
+			a.Buf.selStartLine = -1 // clear selection
 		}
 
 	// --- Tab (ignored in v1) ---
@@ -232,11 +232,11 @@ func (a *App) handleViewerKey(seq []byte) {
 // updateVisualEnd updates the visual selection endpoint after cursor movement.
 // If no selection is active (selStartLine == -1), this is a no-op.
 func (a *App) updateVisualEnd() {
-	if a.buf.selStartLine == -1 {
+	if a.Buf.selStartLine == -1 {
 		return
 	}
-	a.buf.selEndLine = a.buf.cy
-	if !a.buf.selLinewise {
-		a.buf.selEndCol = a.buf.cx
+	a.Buf.selEndLine = a.Buf.cy
+	if !a.Buf.selLinewise {
+		a.Buf.selEndCol = a.Buf.cx
 	}
 }

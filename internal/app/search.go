@@ -1,7 +1,7 @@
 // search.go — find popup: grep execution, result navigation, and popup rendering.
 // Implements Ctrl-F find overlay with query input and results browsing.
 
-package main
+package app
 
 import (
 	"bytes"
@@ -24,13 +24,13 @@ func (a *App) startFind() {
 	a.findScr = 0
 	a.findRunning = false
 	utf8Accum = nil
-	a.focus = FindInputFocus
+	a.Focus = FindInputFocus
 }
 
 // handleFindInputKey processes keys in the find query input popup.
 // Backspace: delete last rune of findQuery.
 // Enter: executeFind().
-// Escape: return to previous focus (ViewerFocus if buf != nil, else TreeFocus).
+// Escape: return to previous Focus (ViewerFocus if buf != nil, else TreeFocus).
 // Printable runes: append to findQuery at findCursor position.
 func (a *App) handleFindInputKey(seq []byte) {
 	if len(seq) == 0 {
@@ -40,10 +40,10 @@ func (a *App) handleFindInputKey(seq []byte) {
 	// Escape (0x1b) — cancel find, return to previous focus.
 	if bytes.Equal(seq, []byte{0x1b}) {
 		utf8Accum = nil
-		if a.buf != nil {
-			a.focus = ViewerFocus
+		if a.Buf != nil {
+			a.Focus = ViewerFocus
 		} else {
-			a.focus = TreeFocus
+			a.Focus = TreeFocus
 		}
 		return
 	}
@@ -106,18 +106,18 @@ func (a *App) insertFindRune(r rune) {
 // executeFind runs grep -rn with --null, parses output into findHits.
 // Sets findRunning=true during execution, false when done.
 // On completion: findCur = 0 if results found, -1 if empty.
-// Switches focus to FindResultsFocus.
+// Switches Focus to FindResultsFocus.
 func (a *App) executeFind() {
 	query := string(a.findQuery)
 	if query == "" {
-		a.statusMsg = "empty query"
+		a.StatusMsg = "empty query"
 		return
 	}
 
 	a.findRunning = true
-	a.render() // show "Searching..." before blocking on grep
+	a.Render() // show "Searching..." before blocking on grep
 
-	cmd := exec.Command("grep", "-rn", "--color=never", "--null", "--", query, a.tree.rootPath)
+	cmd := exec.Command("grep", "-rn", "--color=never", "--null", "--", query, a.Tree.RootPath)
 	out, _ := cmd.CombinedOutput()
 
 	a.findHits = a.parseGrepOutput(out)
@@ -129,7 +129,7 @@ func (a *App) executeFind() {
 		a.findCur = -1
 	}
 	a.findScr = 0
-	a.focus = FindResultsFocus
+	a.Focus = FindResultsFocus
 }
 
 // parseGrepOutput parses grep --null output (file\x00line:text\n) into []Hit.
@@ -213,18 +213,18 @@ func (a *App) handleFindResultsKey(seq []byte) {
 			hit := a.findHits[a.findCur]
 			buf, err := openFile(hit.path)
 			if err != nil {
-				a.statusMsg = err.Error()
+				a.StatusMsg = err.Error()
 			} else {
-				a.buf = buf
-				a.buf.cy = hit.line - 1
-				a.buf.clampCursor()
-				a.buf.ensureVisible(a.termH - 2)
-				a.focus = ViewerFocus
+				a.Buf = buf
+				a.Buf.cy = hit.line - 1
+				a.Buf.clampCursor()
+				a.Buf.ensureVisible(a.TermH - 2)
+				a.Focus = ViewerFocus
 			}
 		}
 
 	case 0x1b: // Escape — refine query
-		a.focus = FindInputFocus
+		a.Focus = FindInputFocus
 		a.findCur = -1
 		a.findScr = 0
 	}
@@ -232,7 +232,7 @@ func (a *App) handleFindResultsKey(seq []byte) {
 
 // scrollFindToCursor ensures findCur is visible by adjusting findScr.
 func (a *App) scrollFindToCursor() {
-	clampScroll(a.findCur, &a.findScr, a.termH-1, len(a.findHits))
+	clampScroll(a.findCur, &a.findScr, a.TermH-1, len(a.findHits))
 }
 
 // renderFindInput draws the centered find popup overlay.
@@ -242,14 +242,14 @@ func (a *App) scrollFindToCursor() {
 // Row 3: "[Enter] search  [Escape] cancel".
 func (a *App) renderFindInput(out *bytes.Buffer) {
 	popupW := 60
-	if a.termW < popupW {
-		popupW = a.termW
+	if a.TermW < popupW {
+		popupW = a.TermW
 	}
-	startCol := (a.termW - popupW) / 2
+	startCol := (a.TermW - popupW) / 2
 	if startCol < 0 {
 		startCol = 0
 	}
-	startRow := (a.termH - 3) / 2
+	startRow := (a.TermH - 3) / 2
 	if startRow < 0 {
 		startRow = 0
 	}
@@ -300,12 +300,12 @@ func (a *App) renderFindInput(out *bytes.Buffer) {
 // "Searching..." while findRunning; "No matches" when empty after completion.
 func (a *App) renderFindResults(out *bytes.Buffer) {
 	viewerStartCol := 1 // 1-indexed ANSI column (no tree = start at col 1)
-	viewerW := a.termW
-	if a.treeVisible {
-		viewerStartCol = a.treeW + 2
-		viewerW = a.termW - a.treeW - 1
+	viewerW := a.TermW
+	if a.TreeVisible {
+		viewerStartCol = a.TreeW + 2
+		viewerW = a.TermW - a.TreeW - 1
 	}
-	visibleRows := a.termH - 1 // rows 0..termH-2
+	visibleRows := a.TermH - 1 // rows 0..TermH-2
 
 	for row := 0; row < visibleRows; row++ {
 		out.WriteString(cursorMove(row+1, viewerStartCol))
