@@ -196,6 +196,9 @@ func (a *App) Render() {
 
 	buf.WriteString(ansiHideCursor)
 
+	// Top header bar (row 1) is always drawn, in every mode.
+	a.renderHeader(&buf)
+
 	// Git mode overrides the standard layout.
 	if a.Git != nil {
 		a.renderGitView(&buf)
@@ -206,19 +209,19 @@ func (a *App) Render() {
 			if visRow < 0 {
 				visRow = 0
 			}
-			if visRow >= a.TermH-1 {
-				visRow = a.TermH - 2
+			if visRow >= a.contentHeight() {
+				visRow = a.contentHeight() - 1
 			}
-			buf.WriteString(cursorMove(visRow+1, a.TreeW+2))
+			buf.WriteString(cursorMove(visRow+2, a.TreeW+2))
 		} else {
 			visRow := a.Git.commitCur - a.Git.commitScr
 			if visRow < 0 {
 				visRow = 0
 			}
-			if visRow >= a.TermH-1 {
-				visRow = a.TermH - 2
+			if visRow >= a.contentHeight() {
+				visRow = a.contentHeight() - 1
 			}
-			buf.WriteString(cursorMove(visRow+1, 1))
+			buf.WriteString(cursorMove(visRow+2, 1))
 		}
 		buf.WriteString(ansiShowCursor)
 		os.Stdout.Write(buf.Bytes())
@@ -231,21 +234,22 @@ func (a *App) Render() {
 		viewerCol = a.TreeW + 2
 	}
 
-	for row := 0; row < a.TermH-1; row++ {
+	for row := 0; row < a.contentHeight(); row++ {
 		if a.TreeVisible {
 			// Tree pane: columns 0..TreeW-1 (0-indexed). Start at 1-indexed col 1.
-			buf.WriteString(cursorMove(row+1, 1))
+			// Content begins at terminal row 2 (row 0 → row+2) due to the header.
+			buf.WriteString(cursorMove(row+2, 1))
 			a.renderTreeLine(&buf, row)
 
 			// Vertical separator at 0-indexed column treeW = 1-indexed treeW+1.
-			buf.WriteString(cursorMove(row+1, a.TreeW+1))
+			buf.WriteString(cursorMove(row+2, a.TreeW+1))
 			buf.WriteString(ansiDim)
 			buf.WriteString("│")
 			buf.WriteString(ansiReset)
 		}
 
 		// Viewer / find pane.
-		buf.WriteString(cursorMove(row+1, viewerCol))
+		buf.WriteString(cursorMove(row+2, viewerCol))
 		if a.Focus == FindInputFocus || a.Focus == FindResultsFocus {
 			// Overlays are drawn separately below — skip viewer for these rows.
 			buf.WriteString(clearToEOL()) // clear stale overlay area
@@ -272,10 +276,10 @@ func (a *App) Render() {
 		if visRow < 0 {
 			visRow = 0
 		}
-		if visRow >= a.TermH-1 {
-			visRow = a.TermH - 2
+		if visRow >= a.contentHeight() {
+			visRow = a.contentHeight() - 1
 		}
-		buf.WriteString(cursorMove(visRow+1, 1))
+		buf.WriteString(cursorMove(visRow+2, 1))
 
 	case ViewerFocus:
 		if a.Buf != nil {
@@ -283,8 +287,8 @@ func (a *App) Render() {
 			if visRow < 0 {
 				visRow = 0
 			}
-			if visRow >= a.TermH-1 {
-				visRow = a.TermH - 2
+			if visRow >= a.contentHeight() {
+				visRow = a.contentHeight() - 1
 			}
 			visCol := a.Buf.cursorCol()
 			// Viewer starts at 1-indexed column 1 (hidden) or treeW+2 (visible).
@@ -292,7 +296,7 @@ func (a *App) Render() {
 			if a.TreeVisible {
 				vc = a.TreeW + 2
 			}
-			buf.WriteString(cursorMove(visRow+1, vc+visCol))
+			buf.WriteString(cursorMove(visRow+2, vc+visCol))
 		}
 
 	case FindInputFocus:
@@ -379,7 +383,7 @@ func (a *App) renderViewerRow(out *bytes.Buffer, row int) {
 	// No file open — show placeholder centered on screen.
 	if a.Buf == nil {
 		msg := "no file open"
-		if row == a.TermH/2 {
+		if row == a.contentHeight()/2 {
 			pad := (availW - len(msg)) / 2
 			if pad < 0 {
 				pad = 0

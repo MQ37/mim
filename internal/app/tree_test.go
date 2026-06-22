@@ -93,7 +93,7 @@ func TestEnsureTreeVisible(t *testing.T) {
 	app := &App{Tree: *tree, TermH: 24}
 
 	// Invariant: after ensureTreeVisible, cursor must be within [scr, scr+visibleH).
-	visibleH := app.TermH - 1
+	visibleH := app.contentHeight()
 
 	// Cursor at 0, scr at 0 — no change.
 	app.Tree.cursor = 0

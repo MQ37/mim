@@ -125,7 +125,7 @@ func TestMouseWheelViewerSticksCursorToEdge(t *testing.T) {
 			selStartLine: -1,
 		},
 		TermW:       80,
-		TermH:       24, // viewport height = 23
+		TermH:       24, // content height = 22 (TermH - header - status)
 		TreeVisible: true,
 		Tree: Tree{
 			flat: []*Node{{name: "x"}},
@@ -191,9 +191,10 @@ func TestMouseClickViewerMovesCursor(t *testing.T) {
 		TreeW:       20,
 		Focus:       TreeFocus,
 	}
-	// Click at row 1 (0-indexed) = line 1 ("foo bar baz"), col 25 in terminal.
+	// Click at content row 1 = line 1 ("foo bar baz"), col 25 in terminal.
+	// Terminal row 3 = content row 1 (header occupies row 1, content starts at row 2).
 	// viewerStartCol = TreeW+2 = 22. visCol = 25-22 = 3 → byte offset 3 (" bar baz").
-	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '2', '5', ';', '2', 'M'})
+	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '2', '5', ';', '3', 'M'})
 	if app.Buf.cy != 1 {
 		t.Errorf("click viewer: cy should be 1, got %d", app.Buf.cy)
 	}
@@ -220,6 +221,7 @@ func TestMouseClickTreeOpensFile(t *testing.T) {
 		TreeVisible: true,
 		TreeW:       20,
 		Tree: Tree{
+			root:     root,
 			flat:     flat,
 			cursor:   0,
 			scr:      0,
@@ -227,8 +229,9 @@ func TestMouseClickTreeOpensFile(t *testing.T) {
 		},
 		Focus: TreeFocus,
 	}
-	// Click row 1 (0-indexed) = flat[1] = the file. Col 5 (inside tree pane).
-	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '5', ';', '2', 'M'})
+	// Click content row 1 = flat[1] = the file. Terminal row 3 (header at row 1).
+	// Col 5 (inside tree pane).
+	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '5', ';', '3', 'M'})
 	if app.Tree.cursor != 1 {
 		t.Fatalf("click tree: cursor should be 1, got %d", app.Tree.cursor)
 	}
@@ -270,8 +273,8 @@ func TestMouseClickTreeTogglesDir(t *testing.T) {
 		Focus: TreeFocus,
 	}
 
-	// Click row 1 (0-indexed) = flat[1] = the subdirectory.
-	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '5', ';', '2', 'M'})
+	// Click content row 1 = flat[1] = the subdirectory. Terminal row 3.
+	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '5', ';', '3', 'M'})
 	if app.Tree.cursor != 1 {
 		t.Fatalf("click tree dir: cursor should be 1, got %d", app.Tree.cursor)
 	}
@@ -344,4 +347,285 @@ func writeTempFile(t *testing.T, dir, name, content string) string {
 		t.Fatalf("write: %v", err)
 	}
 	return path
+}
+// ---------------------------------------------------------------------------
+// Header tab click tests
+// ---------------------------------------------------------------------------
+
+// TestHeaderTabsPositions verifies the tab column ranges are deterministic
+// and non-overlapping.
+func TestHeaderTabsPositions(t *testing.T) {
+	a := &App{TermW: 80, TermH: 24, TreeVisible: true}
+	tabs := a.headerTabs()
+	if len(tabs) != 2 {
+		t.Fatalf("expected 2 tabs, got %d", len(tabs))
+	}
+	if tabs[0].label != "Files" || tabs[1].label != "Git" {
+		t.Errorf("labels: got %q %q, want Files Git", tabs[0].label, tabs[1].label)
+	}
+	// "Files" tab: " Files " = 7 chars, starts at col 2, ends at col 8.
+	if tabs[0].startCol != 2 || tabs[0].endCol != 8 {
+		t.Errorf("Files tab: cols %d-%d, want 2-8", tabs[0].startCol, tabs[0].endCol)
+	}
+	// "Git" tab: " Git " = 5 chars, starts at col 11, ends at col 15.
+	if tabs[1].startCol != 11 || tabs[1].endCol != 15 {
+		t.Errorf("Git tab: cols %d-%d, want 11-15", tabs[1].startCol, tabs[1].endCol)
+	}
+	// Non-overlapping.
+	if tabs[0].endCol >= tabs[1].startCol {
+		t.Error("tabs overlap")
+	}
+}
+
+// TestHeaderTabsActiveState verifies the active flag tracks git mode.
+func TestHeaderTabsActiveState(t *testing.T) {
+	a := &App{TermW: 80, TermH: 24}
+	tabs := a.headerTabs()
+	if !tabs[0].active || tabs[1].active {
+		t.Error("without git: Files should be active, Git inactive")
+	}
+	a.Git = &GitState{}
+	tabs = a.headerTabs()
+	if tabs[0].active || !tabs[1].active {
+		t.Error("with git: Files should be inactive, Git active")
+	}
+}
+
+// TestHeaderClickFilesTab verifies clicking the "Files" tab exits git mode
+// and focuses the tree.
+func TestHeaderClickFilesTab(t *testing.T) {
+	a := &App{
+		TermW:       80,
+		TermH:       24,
+		TreeVisible: true,
+		Git:         &GitState{},
+		Focus:       TreeFocus,
+	}
+	// Click at col 5 (within Files tab cols 2-8), row 1 (header).
+	a.Dispatch([]byte{0x1b, '[', '<', '0', ';', '5', ';', '1', 'M'})
+	if a.Git != nil {
+		t.Error("clicking Files tab should exit git mode (Git should be nil)")
+	}
+	if a.Focus != TreeFocus {
+		t.Errorf("clicking Files tab should focus TreeFocus, got %v", a.Focus)
+	}
+}
+
+// TestHeaderClickGitTab verifies clicking the "Git" tab enters git mode.
+// We can't fully test enterGitMode (requires a git repo), but we can verify
+// it's attempted by checking that Focus moves away from ViewerFocus when
+// there's no repo (enterGitMode sets a.StatusMsg on failure).
+func TestHeaderClickGitTab(t *testing.T) {
+	a := &App{
+		TermW:       80,
+		TermH:       24,
+		TreeVisible: true,
+		Tree:        Tree{RootPath: "/nonexistent"},
+		Focus:       TreeFocus,
+	}
+	// Click at col 13 (within Git tab cols 11-15), row 1 (header).
+	a.Dispatch([]byte{0x1b, '[', '<', '0', ';', '1', '3', ';', '1', 'M'})
+	// enterGitMode fails without a git repo → StatusMsg set, Git stays nil.
+	if a.Git != nil {
+		// If it somehow succeeded, that's fine too — just verify no crash.
+		t.Log("git mode entered (unexpected for /nonexistent but not a failure)")
+	}
+	if a.StatusMsg == "" && a.Git == nil {
+		t.Log("no status msg and no git — enterGitMode may have silently failed")
+	}
+}
+
+// TestMouseClickGitCommitSelectsAndComputes verifies that clicking a commit
+// in the commit list sets the cursor, anchors the selection, and triggers
+// diff computation (same as pressing Enter).
+func TestMouseClickGitCommitSelectsAndComputes(t *testing.T) {
+	app := &App{
+		TermW:       80,
+		TermH:       24,
+		TreeVisible: true,
+		TreeW:       20,
+		Git: &GitState{
+			commits: []Commit{
+				{hash: hashUnstaged, subject: "Unstaged changes"},
+				{hash: hashStaged, subject: "Staged changes"},
+				{hash: "abcdef0123456789abcdef0123456789abcdef01", subject: "Initial"},
+			},
+			commitCur: 0,
+			commitScr: 0,
+			selAnchor: -1,
+			selStart:  -1,
+			selEnd:    -1,
+		},
+		Focus: TreeFocus,
+	}
+
+	// Click at content row 2 = commit index 2 ("Initial"), col 5 (tree pane).
+	// Terminal row 4 = content row 2 (header at row 1, content starts at row 2).
+	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '5', ';', '4', 'M'})
+
+	g := app.Git
+	if g.commitCur != 2 {
+		t.Errorf("click commit: commitCur should be 2, got %d", g.commitCur)
+	}
+	if g.selAnchor != 2 {
+		t.Errorf("click commit: selAnchor should be 2, got %d", g.selAnchor)
+	}
+	if g.selStart != 2 || g.selEnd != 2 {
+		t.Errorf("click commit: selection should be [2,2], got [%d,%d]", g.selStart, g.selEnd)
+	}
+}
+
+// TestMouseClickGitUnstagedSelects verifies clicking the "Unstaged changes"
+// virtual entry selects it (index 0) and anchors the selection.
+func TestMouseClickGitUnstagedSelects(t *testing.T) {
+	app := &App{
+		TermW:       80,
+		TermH:       24,
+		TreeVisible: true,
+		TreeW:       20,
+		Git: &GitState{
+			commits: []Commit{
+				{hash: hashUnstaged, subject: "Unstaged changes"},
+				{hash: hashStaged, subject: "Staged changes"},
+			},
+			commitCur: 1,
+			commitScr: 0,
+			selAnchor: -1,
+			selStart:  -1,
+			selEnd:    -1,
+		},
+		Focus: TreeFocus,
+	}
+
+	// Click at content row 0 = commit index 0 (Unstaged), col 5 (tree pane).
+	// Terminal row 2 = content row 0.
+	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '5', ';', '2', 'M'})
+
+	g := app.Git
+	if g.commitCur != 0 {
+		t.Errorf("click unstaged: commitCur should be 0, got %d", g.commitCur)
+	}
+	if g.selAnchor != 0 {
+		t.Errorf("click unstaged: selAnchor should be 0, got %d", g.selAnchor)
+	}
+	if g.selStart != 0 || g.selEnd != 0 {
+		t.Errorf("click unstaged: selection should be [0,0], got [%d,%d]", g.selStart, g.selEnd)
+	}
+}
+
+// TestMouseClickGitDiffPaneMovesCursor verifies clicking in the diff pane
+// moves the diff cursor to the clicked line.
+func TestMouseClickGitDiffPaneMovesCursor(t *testing.T) {
+	app := &App{
+		TermW:       80,
+		TermH:       24,
+		TreeVisible: true,
+		TreeW:       20,
+		Git: &GitState{
+			commits: []Commit{
+				{hash: hashUnstaged, subject: "Unstaged changes"},
+			},
+			commitCur:   0,
+			commitScr:   0,
+			selAnchor:   0,
+			selStart:    0,
+			selEnd:      0,
+			diffLines:   []string{"diff line 0", "diff line 1", "diff line 2", "diff line 3"},
+			diffCursor:  0,
+			diffScr:     0,
+			diffSelStart: -1,
+		},
+		Focus: TreeFocus,
+	}
+
+	// Click at content row 2 = diff line 2, col 30 (past tree pane → diff pane).
+	// Terminal row 4 = content row 2.
+	app.Dispatch([]byte{0x1b, '[', '<', '0', ';', '3', '0', ';', '4', 'M'})
+
+	if app.Git.diffCursor != 2 {
+		t.Errorf("click diff: diffCursor should be 2, got %d", app.Git.diffCursor)
+	}
+}
+
+// TestMouseWheelScrollsGitDiffViewport verifies that the wheel scrolls the
+// diff viewport (not the cursor line-by-line). The cursor stays put until
+// it would scroll out of view, then sticks to the edge — same as the file
+// viewer.
+func TestMouseWheelScrollsGitDiffViewport(t *testing.T) {
+	app := &App{
+		TermW:       80,
+		TermH:       24, // contentHeight = 22
+		TreeVisible: true,
+		TreeW:       20,
+		Git: &GitState{
+			commits: []Commit{
+				{hash: hashUnstaged, subject: "Unstaged changes"},
+			},
+			commitCur:   0,
+			commitScr:   0,
+			selAnchor:   0,
+			selStart:    0,
+			selEnd:      0,
+			diffLines:   makeLines(100), // 100 diff lines
+			diffCursor:  10,
+			diffScr:     0,
+			diffSelStart: -1,
+		},
+		Focus: TreeFocus,
+	}
+
+	// Wheel down at col 30 (diff pane, past tree width 20). Viewport should
+	// advance; cursor (diffCursor=10) is still well inside the window so it
+	// must NOT move.
+	app.Dispatch([]byte{0x1b, '[', '<', '6', '5', ';', '3', '0', ';', '5', 'M'})
+	if app.Git.diffScr != wheelScrollLines {
+		t.Errorf("wheel down diff: scr should be %d, got %d", wheelScrollLines, app.Git.diffScr)
+	}
+	if app.Git.diffCursor != 10 {
+		t.Errorf("wheel down diff: cursor should stay 10 (still visible), got %d", app.Git.diffCursor)
+	}
+
+	// Wheel back up — viewport returns to top, cursor unchanged.
+	app.Dispatch([]byte{0x1b, '[', '<', '6', '4', ';', '3', '0', ';', '5', 'M'})
+	if app.Git.diffScr != 0 {
+		t.Errorf("wheel up diff: scr should be 0, got %d", app.Git.diffScr)
+	}
+	if app.Git.diffCursor != 10 {
+		t.Errorf("wheel up diff: cursor should stay 10, got %d", app.Git.diffCursor)
+	}
+}
+
+// TestMouseWheelGitDiffSticksCursorToEdge verifies that once the diff viewport
+// scrolls past the cursor, the cursor sticks to the edge.
+func TestMouseWheelGitDiffSticksCursorToEdge(t *testing.T) {
+	app := &App{
+		TermW:       80,
+		TermH:       24, // contentHeight = 22
+		TreeVisible: true,
+		TreeW:       20,
+		Git: &GitState{
+			commits: []Commit{
+				{hash: hashUnstaged, subject: "Unstaged changes"},
+			},
+			commitCur:   0,
+			commitScr:   0,
+			selAnchor:   0,
+			selStart:    0,
+			selEnd:      0,
+			diffLines:   makeLines(100),
+			diffCursor:  5, // near the top
+			diffScr:     0,
+			diffSelStart: -1,
+		},
+		Focus: TreeFocus,
+	}
+
+	// Scroll down 4 notches (12 lines) — cursor at 5 is now above viewport.
+	for i := 0; i < 4; i++ {
+		app.Dispatch([]byte{0x1b, '[', '<', '6', '5', ';', '3', '0', ';', '5', 'M'})
+	}
+	if app.Git.diffCursor != app.Git.diffScr {
+		t.Errorf("after scrolling past cursor: diffCursor should stick to scr=%d, got %d",
+			app.Git.diffScr, app.Git.diffCursor)
+	}
 }

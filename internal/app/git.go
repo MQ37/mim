@@ -157,7 +157,7 @@ func (a *App) handleGitKey(seq []byte) {
 
 
 func (a *App) ensureCommitVisible() {
-	clampScroll(a.Git.commitCur, &a.Git.commitScr, a.TermH-1, len(a.Git.commits))
+	clampScroll(a.Git.commitCur, &a.Git.commitScr, a.contentHeight(), len(a.Git.commits))
 }
 
 // handleCommitListKey handles keys when browsing the commit list.
@@ -200,7 +200,7 @@ func (a *App) handleCommitListKey(seq []byte) {
 		if g.selAnchor != -1 {
 			g.updateSelection()
 		}
-		g.commitScr = g.commitCur - (a.TermH - 1) + 1
+		g.commitScr = g.commitCur - (a.contentHeight()) + 1
 		if g.commitScr < 0 {
 			g.commitScr = 0
 		}
@@ -222,7 +222,7 @@ func (a *App) handleCommitListKey(seq []byte) {
 		a.computeDiff()
 
 	case 0x04: // Ctrl-D — half page down
-		g.commitCur += (a.TermH - 1) / 2
+		g.commitCur += (a.contentHeight()) / 2
 		if g.commitCur > maxIdx {
 			g.commitCur = maxIdx
 		}
@@ -232,7 +232,7 @@ func (a *App) handleCommitListKey(seq []byte) {
 		a.ensureCommitVisible()
 
 	case 0x15: // Ctrl-U — half page up
-		g.commitCur -= (a.TermH - 1) / 2
+		g.commitCur -= (a.contentHeight()) / 2
 		if g.commitCur < 0 {
 			g.commitCur = 0
 		}
@@ -245,7 +245,7 @@ func (a *App) handleCommitListKey(seq []byte) {
 
 
 func (a *App) ensureDiffVisible() {
-	clampScroll(a.Git.diffCursor, &a.Git.diffScr, a.TermH-1, len(a.Git.diffLines))
+	clampScroll(a.Git.diffCursor, &a.Git.diffScr, a.contentHeight(), len(a.Git.diffLines))
 }
 
 // handleDiffViewKey handles keys when viewing diff output.
@@ -285,7 +285,7 @@ func (a *App) handleDiffViewKey(seq []byte) {
 
 	case 'G':
 		g.diffCursor = maxIdx
-		g.diffScr = g.diffCursor - (a.TermH - 1) + 1
+		g.diffScr = g.diffCursor - (a.contentHeight()) + 1
 		if g.diffScr < 0 {
 			g.diffScr = 0
 		}
@@ -294,7 +294,7 @@ func (a *App) handleDiffViewKey(seq []byte) {
 		}
 
 	case 0x04: // Ctrl-D
-		g.diffCursor += (a.TermH - 1) / 2
+		g.diffCursor += (a.contentHeight()) / 2
 		if g.diffCursor > maxIdx {
 			g.diffCursor = maxIdx
 		}
@@ -304,7 +304,7 @@ func (a *App) handleDiffViewKey(seq []byte) {
 		a.ensureDiffVisible()
 
 	case 0x15: // Ctrl-U
-		g.diffCursor -= (a.TermH - 1) / 2
+		g.diffCursor -= (a.contentHeight()) / 2
 		if g.diffCursor < 0 {
 			g.diffCursor = 0
 		}
@@ -349,31 +349,32 @@ func (a *App) renderGitView(out *bytes.Buffer) {
 		return
 	}
 
-	for row := 0; row < a.TermH-1; row++ {
+	for row := 0; row < a.contentHeight(); row++ {
 		// Left: commit list (same column as tree pane).
-		out.WriteString(cursorMove(row+1, 1))
+		// Content begins at terminal row 2 (row 0 → row+2) due to the header.
+		out.WriteString(cursorMove(row+2, 1))
 		a.renderCommitRow(out, row)
 
 		// Separator.
-		out.WriteString(cursorMove(row+1, a.TreeW+1))
+		out.WriteString(cursorMove(row+2, a.TreeW+1))
 		out.WriteString(ansiDim)
 		out.WriteString("│")
 		out.WriteString(ansiReset)
 
 		// Right: diff viewer or placeholder.
-		out.WriteString(cursorMove(row+1, a.TreeW+2))
+		out.WriteString(cursorMove(row+2, a.TreeW+2))
 		if g.loadingDiff {
-			if row == (a.TermH-2)/2 {
+			if row == a.contentHeight()/2 {
 				out.WriteString("Computing diff...")
 			}
 			out.WriteString(clearToEOL())
 		} else if g.diffLines == nil {
-			if row == (a.TermH-2)/2 {
+			if row == a.contentHeight()/2 {
 				out.WriteString("v — select commits, Enter — view diff")
 			}
 			out.WriteString(clearToEOL())
 		} else if len(g.diffLines) == 0 {
-			if row == (a.TermH-2)/2 {
+			if row == a.contentHeight()/2 {
 				out.WriteString("No changes")
 			}
 			out.WriteString(clearToEOL())

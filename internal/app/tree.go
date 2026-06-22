@@ -437,7 +437,7 @@ func (a *App) handleTreeKey(seq []byte) {
 // ensureTreeVisible adjusts t.scr so that t.cursor is visible in the tree
 // pane (visible height = termH - 2).
 func (a *App) ensureTreeVisible() {
-	clampScroll(a.Tree.cursor, &a.Tree.scr, a.TermH-1, len(a.Tree.flat))
+	clampScroll(a.Tree.cursor, &a.Tree.scr, a.contentHeight(), len(a.Tree.flat))
 }
 
 // ---------------------------------------------------------------------------

@@ -218,7 +218,7 @@ func (a *App) handleFindResultsKey(seq []byte) {
 				a.Buf = buf
 				a.Buf.cy = hit.line - 1
 				a.Buf.clampCursor()
-				a.Buf.ensureVisible(a.TermH - 2)
+				a.Buf.ensureVisible(a.contentHeight())
 				a.Focus = ViewerFocus
 			}
 		}
@@ -232,7 +232,7 @@ func (a *App) handleFindResultsKey(seq []byte) {
 
 // scrollFindToCursor ensures findCur is visible by adjusting findScr.
 func (a *App) scrollFindToCursor() {
-	clampScroll(a.findCur, &a.findScr, a.TermH-1, len(a.findHits))
+	clampScroll(a.findCur, &a.findScr, a.contentHeight(), len(a.findHits))
 }
 
 // renderFindInput draws the centered find popup overlay.
@@ -249,9 +249,10 @@ func (a *App) renderFindInput(out *bytes.Buffer) {
 	if startCol < 0 {
 		startCol = 0
 	}
-	startRow := (a.TermH - 3) / 2
-	if startRow < 0 {
-		startRow = 0
+	// Center the 3-row popup within the content area (rows 2..TermH-1).
+	startRow := 2 + (a.contentHeight()-3)/2
+	if startRow < 2 {
+		startRow = 2
 	}
 
 	// Row 1: header with query and cursor.
@@ -305,10 +306,11 @@ func (a *App) renderFindResults(out *bytes.Buffer) {
 		viewerStartCol = a.TreeW + 2
 		viewerW = a.TermW - a.TreeW - 1
 	}
-	visibleRows := a.TermH - 1 // rows 0..TermH-2
+	visibleRows := a.contentHeight() // rows 0..TermH-2
 
 	for row := 0; row < visibleRows; row++ {
-		out.WriteString(cursorMove(row+1, viewerStartCol))
+		// Content begins at terminal row 2 (row 0 → row+2) due to the header.
+		out.WriteString(cursorMove(row+2, viewerStartCol))
 		out.WriteString(clearToEOL())
 
 		// "Searching..." state — show centered message.

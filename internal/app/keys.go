@@ -138,7 +138,7 @@ func (a *App) handleViewerKey(seq []byte) {
 			// gg — jump to first line
 			a.Buf.cy = 0
 			a.Buf.clampCursor()
-			a.Buf.ensureVisible(a.TermH - 1)
+			a.Buf.ensureVisible(a.contentHeight())
 			viewerPendingG = false
 			a.updateVisualEnd()
 			return
@@ -165,12 +165,12 @@ func (a *App) handleViewerKey(seq []byte) {
 	case 'j': // 0x6a — down
 		a.Buf.cy++
 		a.Buf.clampCursor()
-		a.Buf.ensureVisible(a.TermH - 1)
+		a.Buf.ensureVisible(a.contentHeight())
 		isMovement = true
 	case 'k': // 0x6b — up
 		a.Buf.cy--
 		a.Buf.clampCursor()
-		a.Buf.ensureVisible(a.TermH - 1)
+		a.Buf.ensureVisible(a.contentHeight())
 		isMovement = true
 	case 'l': // 0x6c — right
 		a.Buf.cx++
@@ -179,7 +179,7 @@ func (a *App) handleViewerKey(seq []byte) {
 	case 'G': // 0x47 — jump to last line
 		a.Buf.cy = a.Buf.LineCount() - 1
 		a.Buf.clampCursor()
-		a.Buf.ensureVisible(a.TermH - 1)
+		a.Buf.ensureVisible(a.contentHeight())
 		isMovement = true
 	case '0': // 0x30 — jump to column 0
 		a.Buf.cx = 0
@@ -190,19 +190,19 @@ func (a *App) handleViewerKey(seq []byte) {
 		a.Buf.clampCursor()
 		isMovement = true
 	case 0x04: // Ctrl-D — half page down
-		a.Buf.cy += (a.TermH - 1) / 2
+		a.Buf.cy += (a.contentHeight()) / 2
 		a.Buf.clampCursor()
-		a.Buf.ensureVisible(a.TermH - 1)
+		a.Buf.ensureVisible(a.contentHeight())
 		isMovement = true
 	case 0x15: // Ctrl-U — half page up
-		a.Buf.cy -= (a.TermH - 1) / 2
+		a.Buf.cy -= (a.contentHeight()) / 2
 		a.Buf.clampCursor()
-		a.Buf.ensureVisible(a.TermH - 1)
+		a.Buf.ensureVisible(a.contentHeight())
 		isMovement = true
 	case 0x02: // Ctrl-B — page up
-		a.Buf.cy -= (a.TermH - 1)
+		a.Buf.cy -= (a.contentHeight())
 		a.Buf.clampCursor()
-		a.Buf.ensureVisible(a.TermH - 1)
+		a.Buf.ensureVisible(a.contentHeight())
 		isMovement = true
 
 	// --- Visual mode ---

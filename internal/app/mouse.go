@@ -79,19 +79,29 @@ func parseMouseSGR(seq []byte) (ev MouseEvent, ok bool) {
 
 // handleMouse routes a decoded mouse event to the right pane.
 //
-// Wheel events scroll whichever pane the cursor is over (tree vs viewer),
-// mirroring how a user expects the wheel to work. Clicks select/open in the
-// tree and move the cursor in the viewer. Focus follows the click.
+// The top header bar (row 1) contains clickable mode tabs. The content area
+// spans rows 2..TermH-1; the status bar is row TermH. Wheel events scroll
+// whichever pane the cursor is over (tree vs viewer), mirroring how a user
+// expects the wheel to work. Clicks select/open in the tree and move the
+// cursor in the viewer. Focus follows the click.
 func (a *App) handleMouse(ev MouseEvent) {
+	// Header bar (row 1) — check for tab clicks first.
+	if ev.Y == 1 {
+		if !ev.Release {
+			a.handleHeaderClick(ev.X)
+		}
+		return
+	}
+
 	// Status bar (bottom row) — ignore.
 	if ev.Y >= a.TermH {
 		return
 	}
-	// Rows are 1..TermH-1 in the content area.
-	if ev.Y < 1 {
+	// Content area is rows 2..TermH-1.
+	if ev.Y < 2 {
 		return
 	}
-	row := ev.Y - 1 // 0-indexed content row
+	row := ev.Y - 2 // 0-indexed content row (header occupies terminal row 1)
 
 	// --- Wheel scrolling -------------------------------------------------
 	if ev.Button == mouseWheelUp {
@@ -185,7 +195,7 @@ func (a *App) scrollViewer(dir int) {
 	if a.Buf == nil {
 		return
 	}
-	height := a.TermH - 1 // visible content rows (status bar occupies the last)
+	height := a.contentHeight() // visible content rows (header + status bar excluded)
 	if height < 1 {
 		height = 1
 	}
@@ -308,7 +318,7 @@ func (a *App) clickViewer(row, x int) {
 	rawLine := a.Buf.Line(a.Buf.cy)
 	a.Buf.cx = visualToByte(rawLine, visCol)
 	a.Buf.clampCursor()
-	a.Buf.ensureVisible(a.TermH - 1)
+	a.Buf.ensureVisible(a.contentHeight())
 	a.updateVisualEnd()
 	a.Focus = ViewerFocus
 }
@@ -327,7 +337,7 @@ func (a *App) openFindHit(idx int) {
 	a.Buf = buf
 	a.Buf.cy = hit.line - 1
 	a.Buf.clampCursor()
-	a.Buf.ensureVisible(a.TermH - 2)
+	a.Buf.ensureVisible(a.contentHeight())
 	a.Focus = ViewerFocus
 }
 
@@ -359,21 +369,44 @@ func (a *App) mouseScrollGit(row, x int, dir int) {
 		a.ensureCommitVisible()
 		return
 	}
-	// Diff pane.
-	if len(g.diffLines) == 0 {
+	// Diff pane — scroll the viewport (not the cursor line-by-line),
+	// mirroring the file viewer wheel behavior. The cursor sticks to the
+	// edge only when it would scroll out of view.
+	height := a.contentHeight()
+	if height < 1 || len(g.diffLines) == 0 {
 		return
 	}
-	g.diffCursor += dir
+	g.diffScr += dir * wheelScrollLines
+
+	// Clamp the scroll offset to [0, len(diffLines)-height].
+	maxScr := len(g.diffLines) - height
+	if maxScr < 0 {
+		maxScr = 0
+	}
+	if g.diffScr < 0 {
+		g.diffScr = 0
+	}
+	if g.diffScr > maxScr {
+		g.diffScr = maxScr
+	}
+
+	// Keep the cursor inside the visible window; stick to whichever edge
+	// scrolled past it.
+	if g.diffCursor < g.diffScr {
+		g.diffCursor = g.diffScr
+	} else if g.diffCursor >= g.diffScr+height {
+		g.diffCursor = g.diffScr + height - 1
+	}
+	if g.diffSelStart != -1 {
+		g.diffSelEnd = g.diffCursor
+	}
+	// Final safety clamp.
 	if g.diffCursor < 0 {
 		g.diffCursor = 0
 	}
 	if g.diffCursor >= len(g.diffLines) {
 		g.diffCursor = len(g.diffLines) - 1
 	}
-	if g.diffSelStart != -1 {
-		g.diffSelEnd = g.diffCursor
-	}
-	a.ensureDiffVisible()
 }
 
 // mouseClickGit handles clicks in git mode (commit list / diff).
@@ -383,13 +416,19 @@ func (a *App) mouseClickGit(row, x int) {
 		return
 	}
 	if a.inTreePane(x) {
-		// Commit list.
+		// Commit list — clicking a commit selects it and shows its diff,
+		// mirroring the Enter key behavior in handleCommitListKey.
 		idx := g.commitScr + row
 		if idx < 0 || idx >= len(g.commits) {
 			return
 		}
 		g.commitCur = idx
 		a.ensureCommitVisible()
+		// Anchor the selection on the clicked commit so updateSelection
+		// produces a single-commit range, then compute the diff.
+		g.selAnchor = g.commitCur
+		g.updateSelection()
+		a.computeDiff()
 		return
 	}
 	// Diff pane.
