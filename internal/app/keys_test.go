@@ -136,3 +136,70 @@ func makeLines(n int) []string {
 	}
 	return lines
 }
+
+// ---------------------------------------------------------------------------
+// Escape closes file + returns to tree (new behavior requested by user).
+// ---------------------------------------------------------------------------
+
+func TestEscapeClosesFileAndFocusesTree(t *testing.T) {
+	app := &App{
+		Buf: &Buf{
+			lines:        []string{"hello", "world"},
+			cy:           0,
+			cx:           0,
+			scr:          0,
+			selStartLine: -1, // no selection
+		},
+		TermW:        80,
+		TermH:        24,
+		TreeVisible:  true,
+		Focus:        ViewerFocus,
+	}
+
+	app.Dispatch([]byte{0x1b})
+	if app.Buf != nil {
+		t.Errorf("ESC with no selection: Buf should be nil (file closed), got %+v", app.Buf)
+	}
+	if app.Focus != TreeFocus {
+		t.Errorf("ESC with no selection: Focus should be TreeFocus, got %v", app.Focus)
+	}
+}
+
+func TestEscapeFirstClearsSelection(t *testing.T) {
+	app := &App{
+		Buf: &Buf{
+			lines:        []string{"hello", "world"},
+			cy:           1,
+			cx:           0,
+			scr:          0,
+			selStartLine: 0, // selection active
+			selEndLine:   1,
+			selLinewise:  true,
+		},
+		TermW:        80,
+		TermH:        24,
+		TreeVisible:  true,
+		Focus:        ViewerFocus,
+	}
+
+	// First ESC — clears selection but keeps file open.
+	app.Dispatch([]byte{0x1b})
+	if app.Buf == nil {
+		t.Fatal("first ESC should NOT close the file (selection was active)")
+	}
+	if app.Buf.selStartLine != -1 {
+		t.Errorf("first ESC should clear selection, selStartLine got %d", app.Buf.selStartLine)
+	}
+	if app.Focus != ViewerFocus {
+		t.Errorf("first ESC should keep ViewerFocus, got %v", app.Focus)
+	}
+
+	// Second ESC — now closes the file and returns to tree.
+	app.Dispatch([]byte{0x1b})
+	if app.Buf != nil {
+		t.Error("second ESC should close the file")
+	}
+	if app.Focus != TreeFocus {
+		t.Errorf("second ESC should focus tree, got %v", app.Focus)
+	}
+}

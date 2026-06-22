@@ -29,9 +29,14 @@ func run() error {
 	}
 	defer restore(int(os.Stdin.Fd()), oldState)
 
+	// Enable SGR mouse tracking: 1000 = button events (clicks + wheel),
+	// 1006 = SGR coordinate encoding. Disabled in the deferred cleanup
+	// below and on exit.
+	defer os.Stdout.WriteString("\033[?1006l\033[?1000l")
 	defer os.Stdout.WriteString("\033[?25h\033[?1049l\033[0m")
 
 	os.Stdout.WriteString("\033[?1049h\033[?25l")
+	os.Stdout.WriteString("\033[?1000h\033[?1006h")
 	os.Stdout.WriteString("\033[2J\033[H")
 
 	tw, th, err := getTermSize(int(os.Stdin.Fd()))
@@ -170,7 +175,10 @@ func readKey() []byte {
 			break
 		}
 		seq = append(seq, buf[0])
-		if len(seq) >= 10 {
+		// Mouse (SGR) reports can exceed 10 bytes for large coordinates
+		// (e.g. \033[<0;200;80M), so allow up to 32 bytes. The loop also
+		// stops as soon as the non-blocking read returns no more bytes.
+		if len(seq) >= 32 {
 			break
 		}
 	}

@@ -15,9 +15,16 @@ var viewerPendingG bool
 // --- Central dispatch ---
 
 // dispatch is the central input router. Called on every keypress.
-// First checks global keys (q, Ctrl-T, Ctrl-F).
+// First checks for mouse events, then global keys (q, Ctrl-T, Ctrl-F).
 // Then routes to mode-specific handler based on a.Focus.
 func (a *App) Dispatch(seq []byte) {
+	// Mouse events (SGR mode) are routed to the mouse handler before
+	// anything else so a click always lands in the right pane.
+	if ev, ok := parseMouseSGR(seq); ok {
+		a.handleMouse(ev)
+		return
+	}
+
 	// Global keys first (take priority everywhere).
 	if a.handleGlobalKey(seq) {
 		return
@@ -108,12 +115,20 @@ func (a *App) handleViewerKey(seq []byte) {
 		return
 	}
 
-	// --- Escape clears selection or is ignored ---
+	// --- Escape: clear selection, or close file + return to tree ---
 	if bytes.Equal(seq, []byte{0x1b}) {
-		if a.Buf.selStartLine != -1 {
-			a.Buf.selStartLine = -1 // clear selection
-		}
 		viewerPendingG = false
+		if a.Buf.selStartLine != -1 {
+			// First ESC clears any active visual selection.
+			a.Buf.selStartLine = -1
+			return
+		}
+		// No selection: ESC closes the open file and returns focus to the
+		// file tree (so the user can pick the next file to view).
+		a.Buf = nil
+		if a.TreeVisible {
+			a.Focus = TreeFocus
+		}
 		return
 	}
 

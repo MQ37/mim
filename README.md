@@ -12,6 +12,8 @@ repositories. Copy text to clipboard and read diffs — that's it.
 
 - **Vim navigation** — `hjkl`, `gg`, `G`, `0`, `$`, `Ctrl‑D/U/B`, visual
   selection (`v`/`V`), yank to system clipboard (OSC 52)
+- **Mouse support** — scroll wheel scrolls the pane under the pointer; click
+  the file tree to select/expand/open, click the viewer to move the cursor
 - **File tree** — respects `.gitignore` by default, toggle with `Ctrl‑A`
 - **Syntax highlighting** — Go, Python, TypeScript (zero-regex scanner)
 - **Find in files** — `Ctrl‑F`, shell to `grep`, navigate results with `j`/`k`
@@ -48,7 +50,16 @@ mim main.go     # open a single file
 | `Ctrl‑G` | Git diff view |
 | `v` / `V` | Visual selection (charwise / linewise) |
 | `y` | Yank selection to clipboard |
+| `Esc` | Clear selection, or close the open file and return to the tree |
 | `q` | Quit |
+
+### Mouse
+
+| Action | Effect |
+|---|---|
+| Scroll wheel | Scroll the pane under the pointer — the viewer scrolls the viewport (cursor sticks to the edge only when it leaves view); the tree / find / git lists move the selection |
+| Click file tree | Select node; expand/collapse dirs; open files |
+| Click viewer | Move cursor to the clicked line and column |
 
 ## Philosophy
 
