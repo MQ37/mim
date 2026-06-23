@@ -226,19 +226,45 @@ func (a *App) scrollViewer(dir int) {
 	a.updateVisualEnd()
 }
 
-// scrollFindResults moves findCur by dir (clamped, kept visible).
+// scrollFindResults scrolls the find-results *viewport* by one wheel notch
+// in dir (-1 = up, +1 = down). The selection (findCur) stays put and only
+// sticks to the edge when it would scroll out of view — same as the file
+// viewer.
 func (a *App) scrollFindResults(dir int) {
 	if len(a.findHits) == 0 {
 		return
 	}
-	a.findCur += dir
-	if a.findCur < 0 {
-		a.findCur = 0
+	height := a.contentHeight()
+	if height < 1 {
+		height = 1
+	}
+
+	a.findScr += dir * wheelScrollLines
+
+	// Clamp the scroll offset to [0, len(findHits)-height].
+	maxScr := len(a.findHits) - height
+	if maxScr < 0 {
+		maxScr = 0
+	}
+	if a.findScr < 0 {
+		a.findScr = 0
+	}
+	if a.findScr > maxScr {
+		a.findScr = maxScr
+	}
+
+	// Keep the selection inside the visible window.
+	if a.findCur < a.findScr {
+		a.findCur = a.findScr
+	} else if a.findCur >= a.findScr+height {
+		a.findCur = a.findScr + height - 1
 	}
 	if a.findCur >= len(a.findHits) {
 		a.findCur = len(a.findHits) - 1
 	}
-	a.scrollFindToCursor()
+	if a.findCur < 0 {
+		a.findCur = 0
+	}
 }
 
 // mouseClick handles a left/right click at (row, x).
@@ -339,6 +365,7 @@ func (a *App) openFindHit(idx int) {
 	a.Buf.clampCursor()
 	a.Buf.ensureVisible(a.contentHeight())
 	a.Focus = ViewerFocus
+	a.findOpenedFile = true // ESC from viewer returns to find results
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,8 @@ func (a *App) startFind() {
 	a.findCur = -1
 	a.findScr = 0
 	a.findRunning = false
+	a.findOpenedFile = false
+	a.findPrevBuf = a.Buf // remember what was open so ESC can restore it
 	utf8Accum = nil
 	a.Focus = FindInputFocus
 }
@@ -37,14 +39,10 @@ func (a *App) handleFindInputKey(seq []byte) {
 		return
 	}
 
-	// Escape (0x1b) — cancel find, return to previous focus.
+	// Escape (0x1b) — cancel find, restore previous view.
 	if bytes.Equal(seq, []byte{0x1b}) {
 		utf8Accum = nil
-		if a.Buf != nil {
-			a.Focus = ViewerFocus
-		} else {
-			a.Focus = TreeFocus
-		}
+		a.exitFind()
 		return
 	}
 
@@ -104,6 +102,9 @@ func (a *App) insertFindRune(r rune) {
 }
 
 // executeFind runs grep -rn with --null, parses output into findHits.
+// Excludes .git and other common VCS/dependency directories. Paths are
+// stored as absolute (for file opening) but displayed relative to the
+// tree root (see renderFindResults).
 // Sets findRunning=true during execution, false when done.
 // On completion: findCur = 0 if results found, -1 if empty.
 // Switches Focus to FindResultsFocus.
@@ -117,7 +118,13 @@ func (a *App) executeFind() {
 	a.findRunning = true
 	a.Render() // show "Searching..." before blocking on grep
 
-	cmd := exec.Command("grep", "-rn", "--color=never", "--null", "--", query, a.Tree.RootPath)
+	cmd := exec.Command("grep", "-rn", "--color=never", "--null",
+		"--exclude-dir=.git",
+		"--exclude-dir=node_modules",
+		"--exclude-dir=vendor",
+		"--exclude-dir=.hg",
+		"--exclude-dir=.svn",
+		"--", query, a.Tree.RootPath)
 	out, _ := cmd.CombinedOutput()
 
 	a.findHits = a.parseGrepOutput(out)
@@ -220,13 +227,33 @@ func (a *App) handleFindResultsKey(seq []byte) {
 				a.Buf.clampCursor()
 				a.Buf.ensureVisible(a.contentHeight())
 				a.Focus = ViewerFocus
+				a.findOpenedFile = true // ESC from viewer returns to find results
 			}
 		}
 
-	case 0x1b: // Escape — refine query
-		a.Focus = FindInputFocus
-		a.findCur = -1
-		a.findScr = 0
+	case 0x1b: // Escape — exit find mode, restore previous view
+		a.exitFind()
+	}
+}
+
+// exitFind leaves find mode entirely, restoring the Buf (if any) that was
+// active before find was started. Focus goes to the viewer if a file is
+// restored, otherwise to the tree.
+func (a *App) exitFind() {
+	a.findHits = nil
+	a.findCur = -1
+	a.findScr = 0
+	a.findOpenedFile = false
+	utf8Accum = nil
+
+	// Restore the Buf that was open before find was started.
+	a.Buf = a.findPrevBuf
+	a.findPrevBuf = nil
+
+	if a.Buf != nil {
+		a.Focus = ViewerFocus
+	} else if a.TreeVisible {
+		a.Focus = TreeFocus
 	}
 }
 
@@ -355,19 +382,46 @@ func (a *App) renderFindResults(out *bytes.Buffer) {
 		lineNoStr := strconv.Itoa(hit.line)
 		isSelected := hitIdx == a.findCur
 
-		// Calculate space: dim(filepath) + ":" + lineno + ":" + text
+		// Display path relative to the tree root (the stored path is
+		// absolute so openFile still works when the user presses Enter).
+		relPath := hit.path
+		if strings.HasPrefix(relPath, a.Tree.RootPath) {
+			relPath = relPath[len(a.Tree.RootPath):]
+			relPath = strings.TrimPrefix(relPath, "/")
+		}
+		if relPath == "" {
+			relPath = hit.path
+		}
+
+		// Layout: path + ":" + lineno + ":" + text, truncated to viewerW.
+		// The delimiter is all ASCII so byte length == rune count.
 		delim := ":" + lineNoStr + ":"
-		// Reserve at least 5 chars for text, but don't go negative.
-		maxPath := viewerW - len(delim) - 5
-		if maxPath < 3 {
-			maxPath = 3
+		delimW := len(delim)
+
+		if delimW >= viewerW {
+			// Even the delimiter doesn't fit — show it truncated.
+			if isSelected {
+				out.WriteString(ansiReverse)
+			}
+			out.WriteString(truncate(delim, viewerW))
+			if isSelected {
+				out.WriteString(ansiReset)
+			}
+			continue
 		}
-		pathDisplay := truncate(hit.path, maxPath)
-		prefix := pathDisplay + delim
-		maxText := viewerW - len(prefix)
-		if maxText < 0 {
-			maxText = 0
+
+		remaining := viewerW - delimW
+		// Give 60 % to path, 40 % to text.
+		maxPath := remaining * 3 / 5
+		if maxPath > remaining {
+			maxPath = remaining
 		}
+		maxText := remaining - maxPath
+
+		pathDisplay := truncate(relPath, maxPath)
+		// If the path was shorter than allocated, give the slack to text.
+		actualPathW := len([]rune(pathDisplay))
+		maxText += maxPath - actualPathW
 		textDisplay := truncate(hit.text, maxText)
 
 		// Draw the line. Selected lines get reverse video.
@@ -378,7 +432,6 @@ func (a *App) renderFindResults(out *bytes.Buffer) {
 		out.WriteString(pathDisplay)
 		out.WriteString(ansiReset)
 		if isSelected {
-			// Re-enable reverse for the non-dim portion.
 			out.WriteString(ansiReverse)
 		}
 		out.WriteString(delim)

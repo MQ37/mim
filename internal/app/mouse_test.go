@@ -629,3 +629,73 @@ func TestMouseWheelGitDiffSticksCursorToEdge(t *testing.T) {
 			app.Git.diffScr, app.Git.diffCursor)
 	}
 }
+
+// TestMouseWheelScrollsFindResultsViewport verifies that the wheel scrolls
+// the find-results viewport (not the selection line-by-line). The selection
+// stays put until it would scroll out of view, then sticks to the edge.
+func TestMouseWheelScrollsFindResultsViewport(t *testing.T) {
+	app := &App{
+		TermW:       80,
+		TermH:       24, // contentHeight = 22
+		TreeVisible: true,
+		TreeW:       20,
+		Tree:        Tree{RootPath: "/tmp"},
+		Focus:       FindResultsFocus,
+		findHits:    makeHits(100),
+		findCur:     10,
+		findScr:     0,
+	}
+
+	// Wheel down at col 50 (viewer/find pane). Viewport should advance;
+	// selection (findCur=10) is still well inside the window so it must NOT move.
+	app.Dispatch([]byte{0x1b, '[', '<', '6', '5', ';', '5', '0', ';', '5', 'M'})
+	if app.findScr != wheelScrollLines {
+		t.Errorf("wheel down find: scr should be %d, got %d", wheelScrollLines, app.findScr)
+	}
+	if app.findCur != 10 {
+		t.Errorf("wheel down find: cur should stay 10 (still visible), got %d", app.findCur)
+	}
+
+	// Wheel back up — viewport returns to top, selection unchanged.
+	app.Dispatch([]byte{0x1b, '[', '<', '6', '4', ';', '5', '0', ';', '5', 'M'})
+	if app.findScr != 0 {
+		t.Errorf("wheel up find: scr should be 0, got %d", app.findScr)
+	}
+	if app.findCur != 10 {
+		t.Errorf("wheel up find: cur should stay 10, got %d", app.findCur)
+	}
+}
+
+// TestMouseWheelFindResultsSticksToEdge verifies that once the find-results
+// viewport scrolls past the selection, it sticks to the edge.
+func TestMouseWheelFindResultsSticksToEdge(t *testing.T) {
+	app := &App{
+		TermW:       80,
+		TermH:       24, // contentHeight = 22
+		TreeVisible: true,
+		TreeW:       20,
+		Tree:        Tree{RootPath: "/tmp"},
+		Focus:       FindResultsFocus,
+		findHits:    makeHits(100),
+		findCur:     5, // near the top
+		findScr:     0,
+	}
+
+	// Scroll down 4 notches (12 lines) — selection at 5 is now above viewport.
+	for i := 0; i < 4; i++ {
+		app.Dispatch([]byte{0x1b, '[', '<', '6', '5', ';', '5', '0', ';', '5', 'M'})
+	}
+	if app.findCur != app.findScr {
+		t.Errorf("after scrolling past selection: findCur should stick to scr=%d, got %d",
+			app.findScr, app.findCur)
+	}
+}
+
+// makeHits creates n synthetic Hit entries for testing.
+func makeHits(n int) []Hit {
+	hits := make([]Hit, n)
+	for i := 0; i < n; i++ {
+		hits[i] = Hit{path: "file.go", line: i + 1, text: "match text"}
+	}
+	return hits
+}

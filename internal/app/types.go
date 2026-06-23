@@ -103,12 +103,14 @@ type App struct {
 	Focus Focus
 
 	// Find / search state (overlay)
-	findQuery   []rune // text typed by user
-	findCursor  int    // cursor position within findQuery
-	findHits    []Hit  // grep results
-	findCur     int    // selected hit index, -1 if none
-	findScr     int    // scroll offset in results list
-	findRunning bool   // grep subprocess still running
+	findQuery      []rune // text typed by user
+	findCursor     int    // cursor position within findQuery
+	findHits       []Hit  // grep results
+	findCur        int    // selected hit index, -1 if none
+	findScr        int    // scroll offset in results list
+	findRunning    bool   // grep subprocess still running
+	findPrevBuf    *Buf   // Buf active before find was started (restored on exit)
+	findOpenedFile bool   // true when the viewer file was opened from find results
 
 	// Terminal geometry (updated on SIGWINCH)
 	TermW int // total columns

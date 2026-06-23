@@ -115,7 +115,7 @@ func (a *App) handleViewerKey(seq []byte) {
 		return
 	}
 
-	// --- Escape: clear selection, or close file + return to tree ---
+	// --- Escape: clear selection, close file + return to tree/find ---
 	if bytes.Equal(seq, []byte{0x1b}) {
 		viewerPendingG = false
 		if a.Buf.selStartLine != -1 {
@@ -123,8 +123,15 @@ func (a *App) handleViewerKey(seq []byte) {
 			a.Buf.selStartLine = -1
 			return
 		}
-		// No selection: ESC closes the open file and returns focus to the
-		// file tree (so the user can pick the next file to view).
+		// No selection: ESC closes the open file. If the file was opened
+		// from find results, return to the find results list (so the user
+		// can open another match). Otherwise return to the file tree.
+		if a.findOpenedFile {
+			a.Buf = nil
+			a.findOpenedFile = false
+			a.Focus = FindResultsFocus
+			return
+		}
 		a.Buf = nil
 		if a.TreeVisible {
 			a.Focus = TreeFocus
