@@ -399,3 +399,61 @@ func TestFindEscapeFromInputRestoresPrevious(t *testing.T) {
 		t.Errorf("ESC from find input: restored file should be prev.go, got %q", app.Buf.Line(0))
 	}
 }
+
+// TestRenderFindResultsNoMatchesNoOverflow verifies that the "No matches"
+// message (which includes the query) is truncated to the viewer width and
+// does not overflow into the tree pane.
+func TestRenderFindResultsNoMatchesNoOverflow(t *testing.T) {
+	// Narrow viewer + long query = potential overflow.
+	app := &App{
+		TermW:       40,
+		TermH:       24,
+		TreeVisible: true,
+		TreeW:       15,
+		Tree:        Tree{RootPath: "/tmp"},
+		Focus:       FindResultsFocus,
+		findHits:    nil, // no results
+		findQuery:   []rune("this is a very long query that exceeds the narrow viewer width"),
+		findCur:     -1,
+		findScr:     0,
+		findRunning: false,
+	}
+
+	var buf bytes.Buffer
+	app.renderFindResults(&buf)
+	out := stripANSI(buf.String())
+
+	viewerW := 40 - 15 - 1 // = 24
+	for _, line := range splitLines(out) {
+		if len([]rune(line)) > viewerW {
+			t.Errorf("no-matches line length %d exceeds viewerW %d: %q",
+				len([]rune(line)), viewerW, line)
+		}
+	}
+}
+
+// TestRenderFindResultsSearchingNoOverflow verifies the "Searching..."
+// message fits within the viewer on narrow terminals.
+func TestRenderFindResultsSearchingNoOverflow(t *testing.T) {
+	app := &App{
+		TermW:       20,
+		TermH:       24,
+		TreeVisible: true,
+		TreeW:       15,
+		Tree:        Tree{RootPath: "/tmp"},
+		Focus:       FindResultsFocus,
+		findRunning: true,
+	}
+
+	var buf bytes.Buffer
+	app.renderFindResults(&buf)
+	out := stripANSI(buf.String())
+
+	viewerW := 20 - 15 - 1 // = 4
+	for _, line := range splitLines(out) {
+		if len([]rune(line)) > viewerW {
+			t.Errorf("searching line length %d exceeds viewerW %d: %q",
+				len([]rune(line)), viewerW, line)
+		}
+	}
+}

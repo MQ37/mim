@@ -288,8 +288,17 @@ func (a *App) renderFindInput(out *bytes.Buffer) {
 	out.WriteString(" Find: ")
 	out.WriteString(ansiReset)
 
-	// Write query text with cursor indicator.
-	for i, r := range a.findQuery {
+	// Write query text with cursor indicator, truncated to popup width.
+	// " Find: " takes 7 cols; reserve 1 for the cursor-at-end space.
+	maxQueryW := popupW - 8
+	if maxQueryW < 0 {
+		maxQueryW = 0
+	}
+	queryRunes := a.findQuery
+	if len(queryRunes) > maxQueryW {
+		queryRunes = queryRunes[:maxQueryW]
+	}
+	for i, r := range queryRunes {
 		if i == a.findCursor {
 			out.WriteString(ansiReverse)
 			out.WriteString(string(r))
@@ -299,7 +308,7 @@ func (a *App) renderFindInput(out *bytes.Buffer) {
 		}
 	}
 	// Cursor at end: show reverse-video space.
-	if a.findCursor == len(a.findQuery) {
+	if a.findCursor == len(queryRunes) && len(queryRunes) == len(a.findQuery) {
 		out.WriteString(ansiReverse)
 		out.WriteByte(' ')
 		out.WriteString(ansiReset)
@@ -343,8 +352,8 @@ func (a *App) renderFindResults(out *bytes.Buffer) {
 		// "Searching..." state — show centered message.
 		if a.findRunning {
 			if row == visibleRows/2 {
-				msg := "Searching..."
-				pad := (viewerW - len(msg)) / 2
+				msg := truncate("Searching...", viewerW)
+				pad := (viewerW - len([]rune(msg))) / 2
 				if pad < 0 {
 					pad = 0
 				}
@@ -359,8 +368,8 @@ func (a *App) renderFindResults(out *bytes.Buffer) {
 		// No matches state — show centered message.
 		if len(a.findHits) == 0 {
 			if row == visibleRows/2 {
-				msg := "No matches for '" + string(a.findQuery) + "'"
-				pad := (viewerW - len(msg)) / 2
+				msg := truncate("No matches for '"+string(a.findQuery)+"'", viewerW)
+				pad := (viewerW - len([]rune(msg))) / 2
 				if pad < 0 {
 					pad = 0
 				}

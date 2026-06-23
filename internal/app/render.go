@@ -264,6 +264,21 @@ func (a *App) Render() {
 		a.renderFindInput(&buf)
 	} else if a.Focus == FindResultsFocus {
 		a.renderFindResults(&buf)
+		// Re-draw the tree pane and separator on top of the find results.
+		// If a find-result line overflowed by even one character, it wrapped
+		// to the next terminal line at column 1, overwriting the tree that
+		// was drawn in the main loop above. Re-drawing the tree here ensures
+		// the tree area is always correct, regardless of any overflow.
+		if a.TreeVisible {
+			for row := 0; row < a.contentHeight(); row++ {
+				buf.WriteString(cursorMove(row+2, 1))
+				a.renderTreeLine(&buf, row)
+				buf.WriteString(cursorMove(row+2, a.TreeW+1))
+				buf.WriteString(ansiDim)
+				buf.WriteString("│")
+				buf.WriteString(ansiReset)
+			}
+		}
 	}
 
 	// Status bar on the last row.
