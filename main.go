@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 
@@ -60,13 +61,40 @@ func run() error {
 	sigwinch := make(chan os.Signal, 1)
 	signal.Notify(sigwinch, syscall.SIGWINCH)
 
-	cwd, _ := os.Getwd()
-	t, err := app.NewTree(cwd)
+	// Determine the tree root and whether a specific file was requested.
+	//
+	//   mim            → tree rooted at cwd (no file opened)
+	//   mim .          → tree rooted at cwd
+	//   mim some/dir   → tree rooted at some/dir
+	//   mim file.go    → tree rooted at file's parent dir, file opened in viewer
+	rootPath, _ := os.Getwd()
+	openPath := ""
+	if len(os.Args) > 1 {
+		arg := os.Args[1]
+		if info, err := os.Stat(arg); err == nil {
+			if !info.IsDir() {
+				// File argument — open it, root the tree at its directory.
+				openPath, _ = filepath.Abs(arg)
+				rootPath = filepath.Dir(openPath)
+			} else {
+				rootPath, _ = filepath.Abs(arg)
+			}
+		}
+	}
+
+	t, err := app.NewTree(rootPath)
 	if err != nil {
-		t = &app.Tree{RootPath: cwd}
+		t = &app.Tree{RootPath: rootPath}
 	}
 	a.Tree = *t
 	a.Focus = app.TreeFocus
+
+	// If a file was specified on the command line, open it in the viewer.
+	if openPath != "" {
+		if err := a.OpenFile(openPath); err != nil {
+			a.StatusMsg = err.Error()
+		}
+	}
 
 	a.Render()
 

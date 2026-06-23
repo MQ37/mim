@@ -55,6 +55,20 @@ func openFile(path string) (*Buf, error) {
 	}, nil
 }
 
+// OpenFile is the exported entry point for opening a file from outside the
+// app package (e.g. from main.go when the user passes a file path on the
+// command line). It reads the file, sets a.Buf, and switches Focus to the
+// viewer.
+func (a *App) OpenFile(path string) error {
+	buf, err := openFile(path)
+	if err != nil {
+		return err
+	}
+	a.Buf = buf
+	a.Focus = ViewerFocus
+	return nil
+}
+
 // Line returns the n-th line (0-indexed). Clamped to valid range.
 func (b *Buf) Line(n int) string {
 	if n < 0 || n >= len(b.lines) {
