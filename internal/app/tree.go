@@ -387,6 +387,30 @@ func (a *App) handleTreeKey(seq []byte) {
 		}
 		a.ensureTreeVisible()
 
+	// Ctrl-D — half page down
+	case bytes.Equal(seq, []byte{0x04}):
+		t.cursor += a.contentHeight() / 2
+		if t.cursor > len(t.flat)-1 {
+			t.cursor = len(t.flat) - 1
+		}
+		a.ensureTreeVisible()
+
+	// Ctrl-U — half page up
+	case bytes.Equal(seq, []byte{0x15}):
+		t.cursor -= a.contentHeight() / 2
+		if t.cursor < 0 {
+			t.cursor = 0
+		}
+		a.ensureTreeVisible()
+
+	// Ctrl-B — page up
+	case bytes.Equal(seq, []byte{0x02}):
+		t.cursor -= a.contentHeight()
+		if t.cursor < 0 {
+			t.cursor = 0
+		}
+		a.ensureTreeVisible()
+
 	// Enter — expand/collapse dir or open file
 	case bytes.Equal(seq, []byte{'\r'}), bytes.Equal(seq, []byte{'\n'}):
 		if len(t.flat) == 0 || t.cursor < 0 || t.cursor >= len(t.flat) {

@@ -166,20 +166,38 @@ func (a *App) mouseScroll(row, x int, dir int) {
 	a.scrollViewer(dir)
 }
 
-// scrollTree moves the tree cursor by dir rows (clamped, kept visible).
+// scrollTree scrolls the tree *viewport* by one wheel notch in dir
+// (-1 = up, +1 = down). The cursor stays put and only sticks to the edge
+// when it would scroll out of view — same feel as the file viewer.
 func (a *App) scrollTree(dir int) {
 	t := &a.Tree
 	if len(t.flat) == 0 {
 		return
 	}
-	t.cursor += dir
-	if t.cursor < 0 {
-		t.cursor = 0
+	height := a.contentHeight()
+	if height < 1 {
+		height = 1
 	}
-	if t.cursor >= len(t.flat) {
-		t.cursor = len(t.flat) - 1
+
+	t.scr += dir * wheelScrollLines
+
+	maxScr := len(t.flat) - height
+	if maxScr < 0 {
+		maxScr = 0
 	}
-	a.ensureTreeVisible()
+	if t.scr < 0 {
+		t.scr = 0
+	}
+	if t.scr > maxScr {
+		t.scr = maxScr
+	}
+
+	// Keep the cursor inside the visible window, stuck to the scrolled edge.
+	if t.cursor < t.scr {
+		t.cursor = t.scr
+	} else if t.cursor >= t.scr+height {
+		t.cursor = t.scr + height - 1
+	}
 }
 
 // wheelScrollLines is how many lines one mouse-wheel notch scrolls in the
@@ -379,21 +397,33 @@ func (a *App) mouseScrollGit(row, x int, dir int) {
 		return
 	}
 	if a.inTreePane(x) {
-		// Commit list pane.
+		// Commit list pane — scroll the viewport, cursor sticks to the edge.
 		if len(g.commits) == 0 {
 			return
 		}
-		g.commitCur += dir
-		if g.commitCur < 0 {
-			g.commitCur = 0
+		height := a.contentHeight()
+		if height < 1 {
+			height = 1
 		}
-		if g.commitCur >= len(g.commits) {
-			g.commitCur = len(g.commits) - 1
+		g.commitScr += dir * wheelScrollLines
+		maxScr := len(g.commits) - height
+		if maxScr < 0 {
+			maxScr = 0
+		}
+		if g.commitScr < 0 {
+			g.commitScr = 0
+		}
+		if g.commitScr > maxScr {
+			g.commitScr = maxScr
+		}
+		if g.commitCur < g.commitScr {
+			g.commitCur = g.commitScr
+		} else if g.commitCur >= g.commitScr+height {
+			g.commitCur = g.commitScr + height - 1
 		}
 		if g.selAnchor != -1 {
 			g.updateSelection()
 		}
-		a.ensureCommitVisible()
 		return
 	}
 	// Diff pane — scroll the viewport (not the cursor line-by-line),

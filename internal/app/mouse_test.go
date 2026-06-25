@@ -145,10 +145,11 @@ func TestMouseWheelViewerSticksCursorToEdge(t *testing.T) {
 	}
 }
 
-// TestMouseWheelScrollsTree verifies wheel events over the tree pane move the
-// tree cursor.
+// TestMouseWheelScrollsTree verifies wheel events over the tree pane scroll
+// the viewport (by wheelScrollLines), keeping the cursor pinned to the edge —
+// the same natural feel as the file viewer.
 func TestMouseWheelScrollsTree(t *testing.T) {
-	nodes := makeFlatNodes(10)
+	nodes := makeFlatNodes(50) // more than fits in a 22-row content area
 	app := &App{
 		TermW:       80,
 		TermH:       24,
@@ -156,21 +157,25 @@ func TestMouseWheelScrollsTree(t *testing.T) {
 		TreeW:       20,
 		Tree: Tree{
 			flat:     nodes,
-			cursor:   3,
+			cursor:   0,
 			scr:      0,
 			RootPath: "/tmp",
 		},
 		Focus: TreeFocus,
 	}
-	// Wheel down at col 5 (inside tree pane).
+	// Wheel down at col 5 (inside tree pane) scrolls the viewport.
 	app.Dispatch([]byte{0x1b, '[', '<', '6', '5', ';', '5', ';', '5', 'M'})
-	if app.Tree.cursor != 4 {
-		t.Errorf("wheel down over tree: cursor should be 4, got %d", app.Tree.cursor)
+	if app.Tree.scr != wheelScrollLines {
+		t.Errorf("wheel down over tree: scr should be %d, got %d", wheelScrollLines, app.Tree.scr)
 	}
-	// Wheel up.
+	// Cursor sticks to the top visible edge (it was above the new viewport).
+	if app.Tree.cursor != app.Tree.scr {
+		t.Errorf("wheel down: cursor should stick to scr=%d, got %d", app.Tree.scr, app.Tree.cursor)
+	}
+	// Wheel up returns the viewport.
 	app.Dispatch([]byte{0x1b, '[', '<', '6', '4', ';', '5', ';', '5', 'M'})
-	if app.Tree.cursor != 3 {
-		t.Errorf("wheel up over tree: cursor should be 3, got %d", app.Tree.cursor)
+	if app.Tree.scr != 0 {
+		t.Errorf("wheel up over tree: scr should be 0, got %d", app.Tree.scr)
 	}
 }
 
